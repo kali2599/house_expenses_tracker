@@ -17,7 +17,7 @@ def print_months():
         Prints the list of months.
     """
     for i in range(1, 13):
-        print(f"{settings.MONTHS_INDEX[i]}")
+        print(f"{i} {settings.MONTHS_INDEX[i]}")
 
 
 def print_row_table(row, attributes):
