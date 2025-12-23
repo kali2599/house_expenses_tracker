@@ -49,4 +49,4 @@ def update_value():
 
 
 
-app.run(host='localhost', port=8080, debug=True)
+app.run(HOST='localhost', PORT=8080, debug=True)
