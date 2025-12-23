@@ -1,4 +1,3 @@
-from settings import *
 import sqlite3
 
 class SQLManager:
@@ -15,7 +14,10 @@ class SQLManager:
         return data
 
     def update_value_by_attrANDmonth(self, month, attribute, new_value):
-        data = self.cursor.execute(f"UPDATE spese_mensili SET {attribute} =  {new_value} WHERE mese = '{month}'")
+        self.cursor.execute(f"UPDATE spese_mensili SET {attribute} =  {new_value} WHERE mese = '{month}'")
+
+    def insert_expense_in_registry(self, category, nota, amount):
+        self.cursor.execute(f"INSERT INTO registro_spese (categoria, nota, importo) VALUES ('{category}', '{nota}', {amount})")
 
     def commit(self):
         self.conn.commit()

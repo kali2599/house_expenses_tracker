@@ -42,10 +42,7 @@ python main.py
 - `sqlManager.py`: Handles database operations.
 - `utils.py`: Utility functions used across the application.
 - `init.sql`: SQL script to initialize the database schema.
-- `temp.sql`: Temporary SQL file for testing or development purposes.
 
-## License
-This project is licensed under the MIT License. See the LICENSE file for details.
 
 ## Contributing
 Contributions are welcome! Feel free to open issues or submit pull requests.

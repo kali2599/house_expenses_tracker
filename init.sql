@@ -1,4 +1,26 @@
--- Create the spese_mensili table
+-- Create registro_spese table
+CREATE TABLE registro_spese (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    data TEXT DEFAULT (DATE(CURRENT_TIMESTAMP)),
+    categoria TEXT,
+    nota TEXT,
+    importo REAL
+);
+
+-- Example trigger to ensure 'data' is stored in 'YYYY-MM-DD' format (if needed)
+-- This is redundant with DEFAULT (DATE(CURRENT_TIMESTAMP)) but included for clarity
+CREATE TRIGGER IF NOT EXISTS set_data_date
+AFTER INSERT ON registro_spese
+FOR EACH ROW
+BEGIN
+    UPDATE registro_spese
+    SET data = DATE(CURRENT_TIMESTAMP)
+    WHERE id = NEW.id;
+END;
+
+
+
+-- Create  spese_mensili table
 CREATE TABLE spese_mensili (
     mese TEXT PRIMARY KEY,
     entrate REAL,
