@@ -14,7 +14,7 @@ def print_row_table(row, attributes):
     # compute max width for alignment
     max_attr_len = max(len(attr) for attr in attributes)
 
-    print(f"\n--- ROW {row[0]} DATA ---")
+    print(f"\n--- ROW {row[0]} DATA -------")
     for attr, value in zip(attributes, row):
         print(f"{attr.ljust(max_attr_len)} : {value}")
-    print("----------------\n")
+    print("------------------------------\n")
