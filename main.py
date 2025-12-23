@@ -1,6 +1,7 @@
 from utils import *
 from settings import *
 from sqlManager import *
+from datetime import datetime
 import os
 
 
@@ -8,7 +9,7 @@ def main(args : list):
 
     ## CHECK DATABASE HAS BEEN CREATED
     if not os.path.isfile(f"./{DATABASE}"):
-        print("Database not found. Please run 'sqlite3 data.db < init.sql' to create the database.")
+        print("Database not found. Please run 'sqlite3 data.db < init.sql' and 'sqlite3 data.db < populate.sql' to create the database.")
         exit(1)
 
     ## INSTANTIATE SQL-MANAGER
@@ -20,12 +21,14 @@ def main(args : list):
 
 
     ## PRINT DATA AND SELECT MONTH
-    print("Select a month:")
+    year = datetime.now().year
+    print(f"Select a month (year {year}):")
     print_months()
     month_id = ""
     while not (month_id.isdigit() and 1 <= int(month_id) <= 12):
         month_id = input("> Insert a month between 1 and 12: ")
     month = MONTHS_INDEX[int(month_id)]
+    month = f"{year}_{month}"
 
     if args.verbose:
         data = sql_manager.get_data_by_month(month)

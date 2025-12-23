@@ -1,26 +1,14 @@
 -- Create registro_spese table
 CREATE TABLE registro_spese (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    data TEXT DEFAULT (DATE(CURRENT_TIMESTAMP)),
+    data TEXT DEFAULT CURRENT_TIMESTAMP,
     categoria TEXT,
     nota TEXT,
     importo REAL
 );
 
--- Example trigger to ensure 'data' is stored in 'YYYY-MM-DD' format (if needed)
--- This is redundant with DEFAULT (DATE(CURRENT_TIMESTAMP)) but included for clarity
-CREATE TRIGGER IF NOT EXISTS set_data_date
-AFTER INSERT ON registro_spese
-FOR EACH ROW
-BEGIN
-    UPDATE registro_spese
-    SET data = DATE(CURRENT_TIMESTAMP)
-    WHERE id = NEW.id;
-END;
 
-
-
--- Create  spese_mensili table
+-- Create spese_mensili table
 CREATE TABLE spese_mensili (
     mese TEXT PRIMARY KEY,
     entrate REAL,
@@ -48,10 +36,6 @@ CREATE TABLE spese_mensili (
     delta REAL
 );
 
--- Insert initial data into the spese_mensili table
-INSERT INTO spese_mensili(mese, entrate, spesa, pasti_fuori, svago, shopping, inaspettate, varie, salute, vacanze, uscite_variabili, cometa, assicurazioni, condominio, luce, gas, mutuo,
-lenti, telefonia, parrucchiere, palestra, uscite_fisse, uscite_totali, delta)
-VALUES("GIUGNO", 4576, 311, 52.7, 167.6, 102, 56, 75, 0, 0, 764.3, 27, 0, 54.5, 0, 0, 0, 26, 10, 19, 103.3, 239.8, 1004.1, 3571.9);
 
 -- Create trigger to update uscite_variabili
 CREATE TRIGGER update_uscite_variabili AFTER UPDATE OF spesa, pasti_fuori, svago, shopping, inaspettate, varie, salute, vacanze 
@@ -73,6 +57,7 @@ SET uscite_variabili = ROUND(
 )
 WHERE mese = old.mese;
 END;
+
 
 -- Create trigger to update uscite_fisse
 CREATE TRIGGER update_uscite_fisse AFTER UPDATE OF cometa, assicurazioni, condominio, luce, gas, mutuo, lenti, telefonia, parrucchiere, palestra
@@ -97,6 +82,7 @@ SET uscite_fisse = ROUND(
 WHERE mese = old.mese;
 END;    
 
+
 -- Create trigger to update uscite_totali
 CREATE TRIGGER update_uscite_totali AFTER UPDATE OF uscite_variabili, uscite_fisse
 ON spese_mensili
@@ -111,6 +97,7 @@ set uscite_totali = ROUND(
 WHERE mese = old.mese;
 END;    
 
+
 -- Create trigger to update delta
 CREATE TRIGGER update_delta AFTER UPDATE OF uscite_totali, entrate
 ON spese_mensili
@@ -120,3 +107,5 @@ UPDATE spese_mensili
 SET delta = ROUND(entrate - uscite_totali, 1)
 WHERE mese = old.mese; 
 END;
+
+

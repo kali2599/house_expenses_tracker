@@ -25,7 +25,12 @@ The House Expenses Tracker is a Python-based application designed to help you ma
    ```bash
    sqlite3 data.db < init.sql
    ```
-4. Install required Python packages (if any):
+4. Populate the database:
+      ```bash
+   sqlite3 data.db < populate.sql
+   ```
+   (NOTE: populate.sql script has fake data. Fix it with your real data)
+5. Install required Python packages (if any):
    ```bash
    pip install -r requirements.txt
    ```
