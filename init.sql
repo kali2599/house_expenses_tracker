@@ -60,14 +60,14 @@ END;
 
 
 -- Create trigger to update uscite_fisse
-CREATE TRIGGER update_uscite_fisse AFTER UPDATE OF cometa, assicurazioni, condominio, luce, gas, mutuo, lenti, telefonia, parrucchiere, palestra
+CREATE TRIGGER update_uscite_fisse AFTER UPDATE OF investimenti, assicurazioni, condominio, luce, gas, mutuo, lenti, telefonia, parrucchiere, palestra
 ON spese_mensili
 FOR EACH ROW 
 BEGIN
 UPDATE spese_mensili
 SET uscite_fisse = ROUND(
     uscite_fisse + 
-    (new.cometa - old.cometa) +
+    (new.investimenti - old.investimenti) +
     (new.assicurazioni - old.assicurazioni) +
     (new.condominio - old.condominio) +
     (new.luce - old.luce) +
