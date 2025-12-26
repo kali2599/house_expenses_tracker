@@ -21,7 +21,7 @@ CREATE TABLE spese_mensili (
     salute REAL,
     vacanze REAL,
     uscite_variabili REAL,
-    cometa REAL,
+    investimenti REAL,
     assicurazioni REAL,
     condominio REAL,
     luce REAL,
