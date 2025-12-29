@@ -17,7 +17,7 @@ def print_months():
         Prints the list of months.
     """
     for i in range(1, 13):
-        print(f"{settings.MONTHS_INDEX[i]}")
+        print(f"- {i} {settings.MONTHS_INDEX[i]}")
 
 
 def print_row_table(row, attributes):
@@ -32,7 +32,8 @@ def print_row_table(row, attributes):
         return
 
     max_attr_len = max(len(attr) for attr in attributes) # compute max width for alignment
-    print(f"\n--- ROW {row[0]} DATA -------")
+    color = settings.PRINT_ROW_MONTH_COLOR
+    print(f"\n{color}--- ROW {row[0]} DATA -------\033[0m")
     for attr, value in zip(attributes, row):
         print(f"{attr.ljust(max_attr_len)} : {value}")
-    print("------------------------------\n")
+    print(f"{color}--------------------------------\033[0m\n")

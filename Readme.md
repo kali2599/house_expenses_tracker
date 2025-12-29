@@ -38,7 +38,7 @@ The House Expenses Tracker is a Python-based application designed to help you ma
 ## Usage
 Run the application:
 ```bash
-python main.py
+python main.py 
 ```
 
 ## File Structure

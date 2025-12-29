@@ -2,3 +2,5 @@ __pycache__/
 venv/
 data.db
 my_populate.sql
+pull_db.sh
+

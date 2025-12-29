@@ -21,6 +21,7 @@ CREATE TABLE spese_mensili (
     salute REAL,
     vacanze REAL,
     uscite_variabili REAL,
+    abbonamenti REAL,
     investimenti REAL,
     assicurazioni REAL,
     condominio REAL,
@@ -60,13 +61,14 @@ END;
 
 
 -- Create trigger to update uscite_fisse
-CREATE TRIGGER update_uscite_fisse AFTER UPDATE OF investimenti, assicurazioni, condominio, luce, gas, mutuo, lenti, telefonia, parrucchiere, palestra
+CREATE TRIGGER update_uscite_fisse AFTER UPDATE OF abbonamenti, investimenti, assicurazioni, condominio, luce, gas, mutuo, lenti, telefonia, parrucchiere, palestra
 ON spese_mensili
 FOR EACH ROW 
 BEGIN
 UPDATE spese_mensili
 SET uscite_fisse = ROUND(
     uscite_fisse + 
+    (new.abbonamenti - old.abbonamenti) +
     (new.investimenti - old.investimenti) +
     (new.assicurazioni - old.assicurazioni) +
     (new.condominio - old.condominio) +
