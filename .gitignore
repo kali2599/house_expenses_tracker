@@ -1,4 +1,5 @@
 __pycache__/
 venv/
 data.db
-
+database_path
+pull_db.sh
