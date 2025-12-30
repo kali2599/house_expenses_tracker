@@ -3,4 +3,5 @@ venv/
 data.db
 my_populate.sql
 pull_db.sh
+database_path
 

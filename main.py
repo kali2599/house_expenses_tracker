@@ -17,8 +17,18 @@ def main(args : list):
     print(f"\n=== HOUSE EXPENSES TRACKER {year} ===\n")
     global sql_manager
 
+    
+    if not os.path.exists("./database_path"):
+        print("[!] Database path file not found. Please insert the database path here and the file will be created automatically.\n")
+        db_path = input(">Insert database path (PATH/data.db): ").strip()
+        print()
+        open("./database_path", "w").write(db_path)
+    
+    DATABASE = open("./database_path", "r").read().strip()
+
+
     ## CHECK DATABASE HAS BEEN CREATED
-    if not os.path.isfile(f"./{DATABASE}"):
+    if not os.path.isfile(f"{DATABASE}"):
         print("Database not found. Please run 'sqlite3 data.db < init.sql' and 'sqlite3 data.db < populate.sql' to create the database.")
         exit(1)
 
