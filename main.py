@@ -5,19 +5,22 @@ from datetime import datetime
 import os, signal
 
 
-
 def handle_sigint_aux(signum, frame):
     print("\n\n! Process interrupted. Exiting...")
     sql_manager.close()
     exit(0)
 
+# handle sigint
+signal.signal(signal.SIGINT, handle_sigint_aux)
+
+
+
 
 def main(args : list):
-    year = datetime.now().year
-    print(f"\n=== HOUSE EXPENSES TRACKER {year} ===\n")
+    print(f"\n=== HOUSE EXPENSES TRACKER {datetime.now().year} ===\n")
     global sql_manager
 
-    
+    ## CHECK DATABASE PATH FILE EXISTS
     if not os.path.exists("./database_path"):
         print("[!] Database path file not found. Please insert the database path here and the file will be created automatically.\n")
         db_path = input(">Insert database path (PATH/data.db): ").strip()
@@ -32,6 +35,7 @@ def main(args : list):
         print("Database not found. Please run 'sqlite3 data.db < init.sql' and 'sqlite3 data.db < populate.sql' to create the database.")
         exit(1)
 
+
     ## INSTANTIATE SQL-MANAGER
     try: 
         sql_manager = SQLManager(DATABASE)
@@ -39,12 +43,12 @@ def main(args : list):
         print(f"! Error connecting to the database: {e}")
         return
 
-    ## HANDLE SIGINT
-    signal.signal(signal.SIGINT, handle_sigint_aux)
+
+    ## SELECT YEAR
+    year = select_year()
 
 
-    ## PRINT DATA AND SELECT MONTH
-    
+    ## SELECT MONTH  
     print_months()
     month_id = ""
     while not (month_id.isdigit() and 1 <= int(month_id) <= 12):
@@ -52,13 +56,22 @@ def main(args : list):
     month = MONTHS_INDEX[int(month_id)]
     month = f"{year}_{month}"
 
+    if not sql_manager.check_month_exists(month):
+        print("[+] Month non present in the database.")
+        print("[+] Adding month entry...")
+        try:
+            sql_manager.add_month_entry(month)
+            print("[+] Month entry added successfully.")
+        except Exception as e:
+            print(f"[!] Error adding month entry: {e}")
+
     if args.verbose:
         data = sql_manager.get_data_by_month(month)
         print_row_table(data, SQL_ATTRIBUTES_ALL)
 
+    # CHOSE ATTRIBUTE TO UPDATE
     insert = True
     while insert:
-        ## CHOSE ATTRIBUTE
         print("\n[+] Choose an attribute to update")
         for i in range(0, len(SQL_ATTRIBUTES_EDITABLE)):
             print(f"  {i} {SQL_ATTRIBUTES_EDITABLE[i]}")
@@ -68,8 +81,7 @@ def main(args : list):
         attribute = SQL_ATTRIBUTES_EDITABLE[int(attribute_id)]
         print(f"[+] Selected attribute: {attribute}\n")
 
-
-        ## ADD EXPENSE (UPDATE ATTRIBUTE)
+        # ADD EXPENSE VALUE
         while True:
             value = input("> Insert a numeric value: ")
             try:
@@ -79,18 +91,19 @@ def main(args : list):
             except:
                 print("[!] Invalid value. Please insert a numeric value.")
 
-
+        # ADD NOTA
         nota = input("> Add a note for this expense (enter to skip): ")
         nota = 'N/A' if nota == "" else nota
         sql_manager.insert_expense_in_registry(attribute, nota, value)
         print("[+] Expense added in the registry")
         
+        # UPDATE ATTRIBUTE
         old_value = sql_manager.get_value_by_attrANDmonth(month, attribute)
         new_value = old_value + value
         sql_manager.update_value_by_attrANDmonth(month, attribute, new_value)
         print(f"[+] Attribute '{attribute}' updated to: {sql_manager.get_value_by_attrANDmonth(month, attribute)}")
 
-        ## ASK TO CONTINUE
+        # ASK TO CONTINUE
         choice = input("\n> Do you want to insert another expense? (y/n): ")
         if choice.lower() != 'y':
             insert = False
@@ -103,6 +116,7 @@ def main(args : list):
     ## CLEAN-UP 
     sql_manager.commit()
     sql_manager.close()
+
 
 
 if __name__ == "__main__":
