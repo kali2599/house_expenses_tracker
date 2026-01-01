@@ -8,6 +8,8 @@ def handle_args():
     """
     parser = ArgumentParser(description="House expenses tracker")
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose mode")
+    parser.add_argument("-H", "--host", type=str, default=settings.HOST, help="IP address to run the server on")
+    parser.add_argument("-p", "--port", type=int, default=settings.PORT, help="Port number to run the server on")
     args = parser.parse_args()
     return args
 

@@ -2,10 +2,12 @@ import flask, os
 from sqlManager import *
 from settings import *
 from datetime import datetime
+import utils
+
 
 app = flask.Flask(__name__)
 
-@app.route('/update')
+@app.route('/update', methods=['POST'])
 def update_value():
 
     try:
@@ -14,16 +16,20 @@ def update_value():
     except Exception as e:
         return f"[!] Could not connect to database. Error: {str(e)}", 500
     
-    # GET PARAMETERS FROM URL
-    category = flask.request.args.get('category')
-    month = flask.request.args.get('month')
-    amount = flask.request.args.get('amount')
-    note = flask.request.args.get('note', 'N/A')  # Default to 'N/A' if not provided
+    print(flask.request.form)
+
+    # GET PARAMETERS FROM REQUEST FORM
+    category = flask.request.form.get('category')
+    month = flask.request.form.get('month')
+    amount = flask.request.form.get('amount')
+    note = flask.request.form.get('note', 'N/A')  # Default to 'N/A' if not provided
 
     ## INPUT VALIDATION
     if not category or not month or not amount:  # mandatory parameters
         return "Error: 'category', 'month', and 'amount' are required parameters.", 400
     
+    print(f"[+] Received parameters - Category: {category}, Month: {month.upper()}, Amount: {amount}, Note: {note}")
+
     if month.upper() not in MONTHS_INDEX.values():
         return f"Error: '{month}' is not a valid month.", 400
     
@@ -56,6 +62,7 @@ def update_value():
 
 
 if __name__ == "__main__":
+    args = utils.handle_args()
 
     global DATABASE
     
@@ -74,4 +81,11 @@ if __name__ == "__main__":
 
     print(f"[+] Loading sql database from: {DATABASE}\n")
 
-    app.run(host=HOST, port=PORT, debug=True)
+    #TODO: add argparse for host and port. Use default if not provided
+    
+    verbose = args.verbose
+    host = args.host
+    port = args.port    
+    if verbose:
+        print(f"[+] Starting server on {host}:{port}...\n")
+    app.run(host=host, port=port, debug=True)
