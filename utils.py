@@ -47,17 +47,20 @@ def print_row_table(row, attributes):
     """
         Prints a clean table of attributes and values.
 
-        :param row: a tuple representing the row from SQLite
+        :param row: a tuple representing the row values from SQLite
         :param attributes: list of column names in correct order
     """
     if len(row) != len(attributes):
-        print("Error: row length and attribute list length do not match.")
-        return
+        print("Error: row data length and attribute list length do not match.")
+        return 
+    
 
     max_attr_len = max(len(attr) for attr in attributes) # compute max width for alignment
     head_color = settings.MONTH_HEADER_COLOR
     print(f"\n{head_color}--- ROW {row[0]} DATA -------\033[0m")
     for attr, value in zip(attributes, row):
+        if attr == "mese":
+            continue
         if attr == 'entrate':
             color = settings.ENTRATE_COLOR
         elif attr == 'uscite_variabili':
@@ -70,5 +73,5 @@ def print_row_table(row, attributes):
             color = settings.DELTA_RED_COLOR if value < 0 else settings.DELTA_GREEN_COLOR
         else:
             color = "\033[0m"
-        print(f"{color}{attr.ljust(max_attr_len)} : {value}\033[0m")
+        print(f"{color}{attr.ljust(max_attr_len)} : {round(float(value),2)}\033[0m")
     print(f"{head_color}--------------------------------\033[0m\n")

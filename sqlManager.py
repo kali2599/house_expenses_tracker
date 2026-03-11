@@ -24,7 +24,8 @@ class SQLManager:
         return data > 0
     
     def add_month_entry(self, month):
-        columns_info = self.cursor.execute("PRAGMA table_info(spese_mensili)").fetchall()  # Get column names from the table schema
+        columns_info = self.cursor.execute("PRAGMA table_info(spese_mensili)").fetchall()  
+        # Get column names from the table schema
         columns = [col[1] for col in columns_info]  
         columns_str = ', '.join(columns)
         values_str = ', '.join(['0'] * len(columns))

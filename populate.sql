@@ -13,4 +13,4 @@ VALUES
 ("2026_MARZO", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,00),
 
 
--- Substitute initial zero values with your real data. Then execute mysqlite 3 data.db < populate.sql 
+-- Substitute initial zero values with your real data. Then execute sqlite3 data.db < populate.sql 

@@ -1,7 +1,7 @@
 __pycache__/
 venv/
-data.db
-my_populate.sql
-pull_db.sh
+populate.sql
+push_db.sh
 database_path
+test.sh
 
