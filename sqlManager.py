@@ -41,6 +41,61 @@ class SQLManager:
     def close(self):
         self.conn.close()
 
+    # FEATURE 1: Compare different months
+    def get_months_list(self, year=None):
+        """Get list of all months available in database, optionally filtered by year"""
+        if year:
+            query = f"SELECT mese FROM spese_mensili WHERE mese LIKE '{year}_%' ORDER BY mese"
+        else:
+            query = "SELECT mese FROM spese_mensili ORDER BY mese"
+        data = self.cursor.execute(query).fetchall()
+        return [month[0] for month in data]
+
+    def compare_months(self, month1, month2):
+        """Compare two months and return their values for all attributes"""
+        data1 = self.get_data_by_month(month1)
+        data2 = self.get_data_by_month(month2)
+        return data1, data2
+
+    # FEATURE 2: Track single attribute through several months
+    def get_attribute_through_months(self, attribute, months):
+        """Get a specific attribute value across multiple months"""
+        result = {}
+        for month in months:
+            if self.check_month_exists(month):
+                value = self.get_value_by_attrANDmonth(month, attribute)
+                result[month] = value
+        return result
+
+    # FEATURE 3: Undo functionality
+    def get_last_expense(self):
+        """Get the last expense inserted"""
+        data = self.cursor.execute("SELECT id, categoria, nota, importo FROM registro_spese ORDER BY id DESC LIMIT 1").fetchone()
+        return data
+
+    def delete_last_expense(self):
+        """Delete the last expense and return its details"""
+        last_expense = self.get_last_expense()
+        if last_expense:
+            expense_id, category, nota, amount = last_expense
+            self.cursor.execute(f"DELETE FROM registro_spese WHERE id = {expense_id}")
+            return last_expense
+        return None
+
+    def undo_last_expense(self, month):
+        """Undo the last expense: remove it from registry and subtract from monthly total"""
+        last_expense = self.get_last_expense()
+        if last_expense:
+            expense_id, category, nota, amount = last_expense
+            # Delete from registry
+            self.cursor.execute(f"DELETE FROM registro_spese WHERE id = {expense_id}")
+            # Subtract from monthly total
+            current_value = self.get_value_by_attrANDmonth(month, category)
+            new_value = current_value - amount
+            self.update_value_by_attrANDmonth(month, category, new_value)
+            return last_expense
+        return None
+
 
 if __name__ == "__main__":
     db = open("./database_path", "r").read().strip()
