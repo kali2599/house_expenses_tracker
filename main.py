@@ -24,16 +24,15 @@ def show_main_menu():
     print("5. Exit")
     print()
 
-def select_month(year):
-    """Allow user to select a month"""
+def select_year_and_month(sql_manager):
+    """Allow user to select a year and month"""
+    year = select_year()
     print_months()
     month_id = ""
     while not (month_id.isdigit() and 1 <= int(month_id) <= 12):
         month_id = input(f"> Select a month (1-12): ")
     month_name = MONTHS_INDEX[int(month_id)]
     month = f"{year}_{month_name}"
-    
-    sql_manager = globals()['sql_manager']
     
     if not sql_manager.check_month_exists(month):
         print("[+] Month non present in the database.")
@@ -46,8 +45,9 @@ def select_month(year):
     
     return month
 
-def compare_months_flow(sql_manager, year):
+def compare_months_flow(sql_manager):
     """Flow for comparing two months"""
+    year = select_year()
     months = sql_manager.get_months_list(year)
     if not months:
         print("[!] No months found for this year.")
@@ -71,8 +71,9 @@ def compare_months_flow(sql_manager, year):
     months_data = {month1: data1, month2: data2}
     print_months_comparison(months_data, SQL_ATTRIBUTES_ALL)
 
-def track_attribute_flow(sql_manager, year):
+def track_attribute_flow(sql_manager):
     """Flow for tracking an attribute through months"""
+    year = select_year()
     months = sql_manager.get_months_list(year)
     if not months:
         print("[!] No months found for this year.")
@@ -90,8 +91,9 @@ def track_attribute_flow(sql_manager, year):
     month_values = sql_manager.get_attribute_through_months(attribute, months)
     print_attribute_tracking(attribute, month_values)
 
-def undo_expense_flow(sql_manager, month):
+def undo_expense_flow(sql_manager):
     """Flow for undoing the last expense"""
+    month = select_year_and_month(sql_manager)
     last_expense = sql_manager.get_last_expense()
     if not last_expense:
         print("[!] No expenses to undo.")
@@ -112,8 +114,9 @@ def undo_expense_flow(sql_manager, month):
     else:
         print("[+] Undo cancelled.")
 
-def add_expense_flow(sql_manager, month):
+def add_expense_flow(sql_manager):
     """Flow for adding expenses"""
+    month = select_year_and_month(sql_manager)
     insert = True
     while insert:
         print("\n[+] Choose an attribute to update")
@@ -181,24 +184,21 @@ def main(args : list):
         return
 
 
-    ## SELECT YEAR
-    year = select_year()
-
     # MAIN MENU LOOP
     while True:
         show_main_menu()
         menu_choice = input("> Select an option (1-5): ")
         
         if menu_choice == "1":
-            month = select_month(year)
-            add_expense_flow(sql_manager, month)
+            add_expense_flow(sql_manager)
+            sql_manager.commit()
         elif menu_choice == "2":
-            compare_months_flow(sql_manager, year)
+            compare_months_flow(sql_manager)
         elif menu_choice == "3":
-            track_attribute_flow(sql_manager, year)
+            track_attribute_flow(sql_manager)
         elif menu_choice == "4":
-            month = select_month(year)
-            undo_expense_flow(sql_manager, month)
+            undo_expense_flow(sql_manager)
+            sql_manager.commit()
         elif menu_choice == "5":
             print("[+] Exiting...")
             break
@@ -207,7 +207,6 @@ def main(args : list):
         
     
     ## CLEAN-UP 
-    sql_manager.commit()
     sql_manager.close()
 
 
