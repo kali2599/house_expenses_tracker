@@ -17,12 +17,34 @@ signal.signal(signal.SIGINT, handle_sigint_aux)
 def show_main_menu():
     """Display main menu options"""
     print("\n=== MAIN MENU ===")
-    print("1. Add expense")
+    print("1. Add expense to a specific month")
     print("2. Compare months")
     print("3. Track attribute through months")
     print("4. Undo last expense")
     print("5. Exit")
     print()
+
+def select_month(year):
+    """Allow user to select a month"""
+    print_months()
+    month_id = ""
+    while not (month_id.isdigit() and 1 <= int(month_id) <= 12):
+        month_id = input(f"> Select a month (1-12): ")
+    month_name = MONTHS_INDEX[int(month_id)]
+    month = f"{year}_{month_name}"
+    
+    sql_manager = globals()['sql_manager']
+    
+    if not sql_manager.check_month_exists(month):
+        print("[+] Month non present in the database.")
+        print("[+] Adding month entry...")
+        try:
+            sql_manager.add_month_entry(month)
+            print("[+] Month entry added successfully.")
+        except Exception as e:
+            print(f"[!] Error adding month entry: {e}")
+    
+    return month
 
 def compare_months_flow(sql_manager, year):
     """Flow for comparing two months"""
@@ -31,7 +53,7 @@ def compare_months_flow(sql_manager, year):
         print("[!] No months found for this year.")
         return
     
-    print("\n[+] Available months:")
+    print("\n[+] Available months (in temporal order):")
     for i, month in enumerate(months):
         print(f"  {i} {month}")
     
@@ -131,8 +153,6 @@ def add_expense_flow(sql_manager, month):
             insert = False
 
 
-
-
 def main(args : list):
     print(f"\n=== HOUSE EXPENSES TRACKER {datetime.now().year} ===\n")
     global sql_manager
@@ -164,41 +184,20 @@ def main(args : list):
     ## SELECT YEAR
     year = select_year()
 
-
-    ## SELECT MONTH  
-    print_months()
-    month_id = ""
-    while not (month_id.isdigit() and 1 <= int(month_id) <= 12):
-        month_id = input(f"> Select a month (1-12): ")
-    month = MONTHS_INDEX[int(month_id)]
-    month = f"{year}_{month}"
-
-    if not sql_manager.check_month_exists(month):
-        print("[+] Month non present in the database.")
-        print("[+] Adding month entry...")
-        try:
-            sql_manager.add_month_entry(month)
-            print("[+] Month entry added successfully.")
-        except Exception as e:
-            print(f"[!] Error adding month entry: {e}")
-
-    if args.verbose:
-        data = sql_manager.get_data_by_month(month)
-        print_row_table(data, SQL_ATTRIBUTES_ALL)
-
     # MAIN MENU LOOP
-    menu_choice = ""
     while True:
         show_main_menu()
         menu_choice = input("> Select an option (1-5): ")
         
         if menu_choice == "1":
+            month = select_month(year)
             add_expense_flow(sql_manager, month)
         elif menu_choice == "2":
             compare_months_flow(sql_manager, year)
         elif menu_choice == "3":
             track_attribute_flow(sql_manager, year)
         elif menu_choice == "4":
+            month = select_month(year)
             undo_expense_flow(sql_manager, month)
         elif menu_choice == "5":
             print("[+] Exiting...")
@@ -206,10 +205,6 @@ def main(args : list):
         else:
             print("[!] Invalid option. Please try again.")
         
-    if args.verbose:
-        data = sql_manager.get_data_by_month(month)
-        print_row_table(data, SQL_ATTRIBUTES_ALL)
-
     
     ## CLEAN-UP 
     sql_manager.commit()
