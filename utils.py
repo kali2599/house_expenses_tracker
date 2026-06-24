@@ -75,3 +75,90 @@ def print_row_table(row, attributes):
             color = "\033[0m"
         print(f"{color}{attr.ljust(max_attr_len)} : {round(float(value),2)}\033[0m")
     print(f"{head_color}--------------------------------\033[0m\n")
+
+
+def print_months_comparison(months_data, attributes):
+    """
+        Prints a comparison table of multiple months.
+
+        :param months_data: dictionary with month names as keys and row tuples as values
+        :param attributes: list of column names
+    """
+    if not months_data:
+        print("[!] No data to compare.")
+        return
+
+    max_attr_len = max(len(attr) for attr in attributes)
+    max_month_len = max(len(month) for month in months_data.keys())
+    head_color = settings.MONTH_HEADER_COLOR
+    
+    # Print header
+    print(f"\n{head_color}--- MONTHS COMPARISON -------\033[0m")
+    print(f"\n{' ' * max_attr_len} | {' | '.join(month.ljust(12) for month in months_data.keys())}")
+    print("-" * (max_attr_len + 5 + (15 * len(months_data))))
+    
+    # Print each attribute
+    for attr_idx, attr in enumerate(attributes):
+        if attr == "mese":
+            continue
+        
+        # Determine color based on attribute type
+        if attr == 'entrate':
+            color = settings.ENTRATE_COLOR
+        elif attr == 'uscite_variabili':
+            color = settings.USCITE_VARIABILI_COLOR
+        elif attr == 'uscite_fisse':
+            color = settings.USCITE_FISSE_COLOR
+        elif attr == 'uscite_totali':
+            color = settings.USCITE_TOTALI_COLOR
+        elif attr == 'delta':
+            color = settings.DELTA_RED_COLOR
+        else:
+            color = "\033[0m"
+        
+        row_str = f"{color}{attr.ljust(max_attr_len)}\033[0m | "
+        for month, data in months_data.items():
+            if data:
+                value = round(float(data[attr_idx]), 2)
+                row_str += f"{str(value).ljust(12)} | "
+        print(row_str.rstrip(" | "))
+    
+    print(f"{head_color}---------------------------------------------\033[0m\n")
+
+
+def print_attribute_tracking(attribute, month_values):
+    """
+        Prints a tracking table for a single attribute across months.
+
+        :param attribute: the attribute name being tracked
+        :param month_values: dictionary with month names as keys and values
+    """
+    if not month_values:
+        print("[!] No data to display.")
+        return
+
+    head_color = settings.MONTH_HEADER_COLOR
+    print(f"\n{head_color}--- TRACKING: {attribute} -------\033[0m")
+    
+    # Determine color based on attribute type
+    if attribute == 'entrate':
+        color = settings.ENTRATE_COLOR
+    elif attribute == 'uscite_variabili':
+        color = settings.USCITE_VARIABILI_COLOR
+    elif attribute == 'uscite_fisse':
+        color = settings.USCITE_FISSE_COLOR
+    elif attribute == 'uscite_totali':
+        color = settings.USCITE_TOTALI_COLOR
+    elif attribute == 'delta':
+        color = settings.DELTA_RED_COLOR
+    else:
+        color = "\033[0m"
+    
+    print(f"\n{color}Month{''.ljust(15)}Value\033[0m")
+    print("-" * 30)
+    
+    for month in sorted(month_values.keys()):
+        value = month_values[month]
+        print(f"{color}{month.ljust(20)}{value}\033[0m")
+    
+    print(f"{head_color}--------------------\033[0m\n")
