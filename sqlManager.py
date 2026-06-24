@@ -11,7 +11,7 @@ class SQLManager:
 
     def get_value_by_attrANDmonth(self, month, attribute):
         data = self.cursor.execute(f"SELECT {attribute} FROM spese_mensili WHERE mese = '{month}'").fetchone()[0]
-        return data
+        return round(float(data),2)
 
     def update_value_by_attrANDmonth(self, month, attribute, new_value):
         self.cursor.execute(f"UPDATE spese_mensili SET {attribute} =  {new_value} WHERE mese = '{month}'")
@@ -27,8 +27,9 @@ class SQLManager:
         columns_info = self.cursor.execute("PRAGMA table_info(spese_mensili)").fetchall()  
         # Get column names from the table schema
         columns = [col[1] for col in columns_info]  
+        #print(f"[DEBUG] Columns in spese_mensili: {columns}")  # Debug print to check column names
         columns_str = ', '.join(columns)
-        values_str = ', '.join(['0'] * len(columns))
+        values_str = ', '.join(['0'] * (len(columns) - 1)) # -1 to excluding the 'month' column
         values_str = f"'{month}', " + values_str
         query = f"INSERT INTO spese_mensili ({columns_str}) VALUES ({values_str})"
         self.cursor.execute(query)
