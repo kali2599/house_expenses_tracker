@@ -14,6 +14,123 @@ def handle_sigint_aux(signum, frame):
 signal.signal(signal.SIGINT, handle_sigint_aux)
 
 
+def show_main_menu():
+    """Display main menu options"""
+    print("\n=== MAIN MENU ===")
+    print("1. Add expense")
+    print("2. Compare months")
+    print("3. Track attribute through months")
+    print("4. Undo last expense")
+    print("5. Exit")
+    print()
+
+def compare_months_flow(sql_manager, year):
+    """Flow for comparing two months"""
+    months = sql_manager.get_months_list(year)
+    if not months:
+        print("[!] No months found for this year.")
+        return
+    
+    print("\n[+] Available months:")
+    for i, month in enumerate(months):
+        print(f"  {i} {month}")
+    
+    month1_idx = ""
+    while not (month1_idx.isdigit() and 0 <= int(month1_idx) < len(months)):
+        month1_idx = input(f"> Select first month (0-{len(months)-1}): ")
+    month1 = months[int(month1_idx)]
+    
+    month2_idx = ""
+    while not (month2_idx.isdigit() and 0 <= int(month2_idx) < len(months)):
+        month2_idx = input(f"> Select second month (0-{len(months)-1}): ")
+    month2 = months[int(month2_idx)]
+    
+    data1, data2 = sql_manager.compare_months(month1, month2)
+    months_data = {month1: data1, month2: data2}
+    print_months_comparison(months_data, SQL_ATTRIBUTES_ALL)
+
+def track_attribute_flow(sql_manager, year):
+    """Flow for tracking an attribute through months"""
+    months = sql_manager.get_months_list(year)
+    if not months:
+        print("[!] No months found for this year.")
+        return
+    
+    print("\n[+] Choose an attribute to track:")
+    for i, attr in enumerate(SQL_ATTRIBUTES_EDITABLE):
+        print(f"  {i} {attr}")
+    
+    attr_id = ""
+    while not (attr_id.isdigit() and 0 <= int(attr_id) < len(SQL_ATTRIBUTES_EDITABLE)):
+        attr_id = input(f"> Insert a value between 0 and {len(SQL_ATTRIBUTES_EDITABLE)-1}: ")
+    attribute = SQL_ATTRIBUTES_EDITABLE[int(attr_id)]
+    
+    month_values = sql_manager.get_attribute_through_months(attribute, months)
+    print_attribute_tracking(attribute, month_values)
+
+def undo_expense_flow(sql_manager, month):
+    """Flow for undoing the last expense"""
+    last_expense = sql_manager.get_last_expense()
+    if not last_expense:
+        print("[!] No expenses to undo.")
+        return
+    
+    expense_id, category, nota, amount = last_expense
+    print(f"\n[+] Last expense:")
+    print(f"    ID: {expense_id}")
+    print(f"    Category: {category}")
+    print(f"    Note: {nota}")
+    print(f"    Amount: {amount}")
+    
+    confirm = input("\n> Are you sure you want to undo this expense? (y/n): ")
+    if confirm.lower() == 'y':
+        sql_manager.undo_last_expense(month)
+        sql_manager.commit()
+        print("[+] Expense undone successfully!")
+    else:
+        print("[+] Undo cancelled.")
+
+def add_expense_flow(sql_manager, month):
+    """Flow for adding expenses"""
+    insert = True
+    while insert:
+        print("\n[+] Choose an attribute to update")
+        for i in range(0, len(SQL_ATTRIBUTES_EDITABLE)):
+            print(f"  {i} {SQL_ATTRIBUTES_EDITABLE[i]}")
+        attribute_id = ""
+        while not (attribute_id.isdigit() and 0 <= int(attribute_id) <= len(SQL_ATTRIBUTES_EDITABLE)-1):
+            attribute_id = input(f"> Insert a value between 0 and {len(SQL_ATTRIBUTES_EDITABLE)-1}: ")
+        attribute = SQL_ATTRIBUTES_EDITABLE[int(attribute_id)]
+        print(f"[+] Selected attribute: {attribute}\n")
+
+        # ADD EXPENSE VALUE
+        while True:
+            value = input("> Insert a numeric value: ")
+            try:
+                value = float(value)
+                value = round(value, 1)
+                break
+            except:
+                print("[!] Invalid value. Please insert a numeric value.")
+
+        # ADD NOTA
+        nota = input("> Add a note for this expense (enter to skip): ")
+        nota = 'N/A' if nota == "" else nota
+        sql_manager.insert_expense_in_registry(attribute, nota, value)
+        print("[+] Expense added in the registry")
+        
+        # UPDATE ATTRIBUTE
+        old_value = sql_manager.get_value_by_attrANDmonth(month, attribute)
+        new_value = old_value + value
+        sql_manager.update_value_by_attrANDmonth(month, attribute, new_value)
+        print(f"[+] Attribute '{attribute}' updated to: {sql_manager.get_value_by_attrANDmonth(month, attribute)}")
+
+        # ASK TO CONTINUE
+        choice = input("\n> Do you want to insert another expense? (y/n): ")
+        if choice.lower() != 'y':
+            insert = False
+
+
 
 
 def main(args : list):
@@ -69,44 +186,25 @@ def main(args : list):
         data = sql_manager.get_data_by_month(month)
         print_row_table(data, SQL_ATTRIBUTES_ALL)
 
-    # CHOSE ATTRIBUTE TO UPDATE
-    insert = True
-    while insert:
-        print("\n[+] Choose an attribute to update")
-        for i in range(0, len(SQL_ATTRIBUTES_EDITABLE)):
-            print(f"  {i} {SQL_ATTRIBUTES_EDITABLE[i]}")
-        attribute_id = ""
-        while not (attribute_id.isdigit() and 0 <= int(attribute_id) <= len(SQL_ATTRIBUTES_EDITABLE)-1):
-            attribute_id = input(f"> Insert a value between 0 and {len(SQL_ATTRIBUTES_EDITABLE)-1}: ")
-        attribute = SQL_ATTRIBUTES_EDITABLE[int(attribute_id)]
-        print(f"[+] Selected attribute: {attribute}\n")
-
-        # ADD EXPENSE VALUE
-        while True:
-            value = input("> Insert a numeric value: ")
-            try:
-                value = float(value)
-                value = round(value, 1)
-                break
-            except:
-                print("[!] Invalid value. Please insert a numeric value.")
-
-        # ADD NOTA
-        nota = input("> Add a note for this expense (enter to skip): ")
-        nota = 'N/A' if nota == "" else nota
-        sql_manager.insert_expense_in_registry(attribute, nota, value)
-        print("[+] Expense added in the registry")
+    # MAIN MENU LOOP
+    menu_choice = ""
+    while True:
+        show_main_menu()
+        menu_choice = input("> Select an option (1-5): ")
         
-        # UPDATE ATTRIBUTE
-        old_value = sql_manager.get_value_by_attrANDmonth(month, attribute)
-        new_value = old_value + value
-        sql_manager.update_value_by_attrANDmonth(month, attribute, new_value)
-        print(f"[+] Attribute '{attribute}' updated to: {sql_manager.get_value_by_attrANDmonth(month, attribute)}")
-
-        # ASK TO CONTINUE
-        choice = input("\n> Do you want to insert another expense? (y/n): ")
-        if choice.lower() != 'y':
-            insert = False
+        if menu_choice == "1":
+            add_expense_flow(sql_manager, month)
+        elif menu_choice == "2":
+            compare_months_flow(sql_manager, year)
+        elif menu_choice == "3":
+            track_attribute_flow(sql_manager, year)
+        elif menu_choice == "4":
+            undo_expense_flow(sql_manager, month)
+        elif menu_choice == "5":
+            print("[+] Exiting...")
+            break
+        else:
+            print("[!] Invalid option. Please try again.")
         
     if args.verbose:
         data = sql_manager.get_data_by_month(month)
@@ -121,4 +219,4 @@ def main(args : list):
 
 if __name__ == "__main__":
     args = handle_args()
-    main(args) 
+    main(args)
