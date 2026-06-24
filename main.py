@@ -117,6 +117,11 @@ def undo_expense_flow(sql_manager):
 def add_expense_flow(sql_manager):
     """Flow for adding expenses"""
     month = select_year_and_month(sql_manager)
+    
+    # Display current month values
+    data = sql_manager.get_data_by_month(month)
+    print_row_table(data, SQL_ATTRIBUTES_ALL)
+    
     insert = True
     while insert:
         print("\n[+] Choose an attribute to update")
