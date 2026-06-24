@@ -77,9 +77,31 @@ def print_row_table(row, attributes):
     print(f"{head_color}--------------------------------\033[0m\n")
 
 
+def get_color_for_attribute(attribute):
+    """
+        Get the appropriate color for an attribute.
+        
+        :param attribute: the attribute name
+        :return: ANSI color code
+    """
+    if attribute == 'entrate':
+        return settings.ENTRATE_COLOR
+    elif attribute == 'uscite_variabili':
+        return settings.USCITE_VARIABILI_COLOR
+    elif attribute == 'uscite_fisse':
+        return settings.USCITE_FISSE_COLOR
+    elif attribute == 'uscite_totali':
+        return settings.USCITE_TOTALI_COLOR
+    elif attribute == 'delta':
+        return settings.DELTA_RED_COLOR
+    else:
+        return "\033[0m"
+
+
 def print_months_comparison(months_data, attributes):
     """
-        Prints a comparison table of multiple months.
+        Prints a comparison table of multiple months with proper colors.
+        Months are sorted and each value is colored according to its attribute type.
 
         :param months_data: dictionary with month names as keys and row tuples as values
         :param attributes: list of column names
@@ -89,12 +111,12 @@ def print_months_comparison(months_data, attributes):
         return
 
     max_attr_len = max(len(attr) for attr in attributes)
-    max_month_len = max(len(month) for month in months_data.keys())
     head_color = settings.MONTH_HEADER_COLOR
+    sorted_months = sorted(months_data.keys())
     
     # Print header
     print(f"\n{head_color}--- MONTHS COMPARISON -------\033[0m")
-    print(f"\n{' ' * max_attr_len} | {' | '.join(month.ljust(12) for month in months_data.keys())}")
+    print(f"\n{' ' * max_attr_len} | {' | '.join(month.ljust(12) for month in sorted_months)}")
     print("-" * (max_attr_len + 5 + (15 * len(months_data))))
     
     # Print each attribute
@@ -102,25 +124,15 @@ def print_months_comparison(months_data, attributes):
         if attr == "mese":
             continue
         
-        # Determine color based on attribute type
-        if attr == 'entrate':
-            color = settings.ENTRATE_COLOR
-        elif attr == 'uscite_variabili':
-            color = settings.USCITE_VARIABILI_COLOR
-        elif attr == 'uscite_fisse':
-            color = settings.USCITE_FISSE_COLOR
-        elif attr == 'uscite_totali':
-            color = settings.USCITE_TOTALI_COLOR
-        elif attr == 'delta':
-            color = settings.DELTA_RED_COLOR
-        else:
-            color = "\033[0m"
+        # Get color for attribute
+        color = get_color_for_attribute(attr)
         
         row_str = f"{color}{attr.ljust(max_attr_len)}\033[0m | "
-        for month, data in months_data.items():
+        for month in sorted_months:
+            data = months_data[month]
             if data:
                 value = round(float(data[attr_idx]), 2)
-                row_str += f"{str(value).ljust(12)} | "
+                row_str += f"{color}{str(value).ljust(12)}\033[0m | "
         print(row_str.rstrip(" | "))
     
     print(f"{head_color}---------------------------------------------\033[0m\n")
@@ -128,7 +140,10 @@ def print_months_comparison(months_data, attributes):
 
 def print_attribute_tracking(attribute, month_values):
     """
-        Prints a tracking table for a single attribute across months.
+        Prints a tracking table for a single attribute across months with colors.
+        - Red color for highest value
+        - Green color for lowest value
+        - Months are sorted
 
         :param attribute: the attribute name being tracked
         :param month_values: dictionary with month names as keys and values
@@ -137,28 +152,27 @@ def print_attribute_tracking(attribute, month_values):
         print("[!] No data to display.")
         return
 
+    # Find max and min values
+    max_value = max(month_values.values())
+    min_value = min(month_values.values())
+
     head_color = settings.MONTH_HEADER_COLOR
     print(f"\n{head_color}--- TRACKING: {attribute} -------\033[0m")
     
-    # Determine color based on attribute type
-    if attribute == 'entrate':
-        color = settings.ENTRATE_COLOR
-    elif attribute == 'uscite_variabili':
-        color = settings.USCITE_VARIABILI_COLOR
-    elif attribute == 'uscite_fisse':
-        color = settings.USCITE_FISSE_COLOR
-    elif attribute == 'uscite_totali':
-        color = settings.USCITE_TOTALI_COLOR
-    elif attribute == 'delta':
-        color = settings.DELTA_RED_COLOR
-    else:
-        color = "\033[0m"
-    
-    print(f"\n{color}Month{''.ljust(15)}Value\033[0m")
+    print(f"\n{head_color}Month{''.ljust(15)}Value\033[0m")
     print("-" * 30)
     
     for month in sorted(month_values.keys()):
         value = month_values[month]
+        
+        # Color based on highest/lowest
+        if value == max_value:
+            color = settings.DELTA_RED_COLOR  # Red for highest
+        elif value == min_value:
+            color = settings.DELTA_GREEN_COLOR  # Green for lowest
+        else:
+            color = "\033[0m"  # Default
+        
         print(f"{color}{month.ljust(20)}{value}\033[0m")
     
     print(f"{head_color}--------------------\033[0m\n")
