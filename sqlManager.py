@@ -43,13 +43,25 @@ class SQLManager:
 
     # FEATURE 1: Compare different months
     def get_months_list(self, year=None):
-        """Get list of all months available in database, optionally filtered by year"""
+        """Get list of all months available in database, optionally filtered by year, sorted temporally"""
         if year:
             query = f"SELECT mese FROM spese_mensili WHERE mese LIKE '{year}_%' ORDER BY mese"
         else:
             query = "SELECT mese FROM spese_mensili ORDER BY mese"
         data = self.cursor.execute(query).fetchall()
-        return [month[0] for month in data]
+        months = [month[0] for month in data]
+        # Sort temporally: extract year and month, then sort
+        months_sorted = sorted(months, key=lambda x: (int(x.split('_')[0]), self._get_month_number(x.split('_')[1])))
+        return months_sorted
+
+    def _get_month_number(self, month_name):
+        """Convert Italian month name to number for proper sorting"""
+        months_map = {
+            'GENNAIO': 1, 'FEBBRAIO': 2, 'MARZO': 3, 'APRILE': 4,
+            'MAGGIO': 5, 'GIUGNO': 6, 'LUGLIO': 7, 'AGOSTO': 8,
+            'SETTEMBRE': 9, 'OTTOBRE': 10, 'NOVEMBRE': 11, 'DICEMBRE': 12
+        }
+        return months_map.get(month_name, 0)
 
     def compare_months(self, month1, month2):
         """Compare two months and return their values for all attributes"""
