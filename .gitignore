@@ -1,7 +1,6 @@
 __pycache__/
-venv/
 populate.sql
 push_db.sh
 database_path
 test.sh
-
+.venv/
