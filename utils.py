@@ -50,6 +50,7 @@ def print_row_table(row, attributes):
         :param row: a tuple representing the row values from SQLite
         :param attributes: list of column names in correct order
     """
+
     if len(row) != len(attributes):
         print("Error: row data length and attribute list length do not match.")
         return 
@@ -77,11 +78,13 @@ def print_row_table(row, attributes):
     print(f"{head_color}--------------------------------\033[0m\n")
 
 
-def get_color_for_attribute(attribute):
+def get_color_for_attribute(attribute, value=None):
+    #TODO: Add value-based coloring for delta if needed
     """
         Get the appropriate color for an attribute.
         
         :param attribute: the attribute name
+        :param value: the value of the attribute (optional)
         :return: ANSI color code
     """
     if attribute == 'entrate':
@@ -93,7 +96,7 @@ def get_color_for_attribute(attribute):
     elif attribute == 'uscite_totali':
         return settings.USCITE_TOTALI_COLOR
     elif attribute == 'delta':
-        return settings.DELTA_RED_COLOR
+        return ""
     else:
         return "\033[0m"
 
@@ -162,7 +165,7 @@ def print_attribute_tracking(attribute, month_values):
     print(f"\n{head_color}Month{''.ljust(15)}Value\033[0m")
     print("-" * 30)
     
-    for month in sorted(month_values.keys()):
+    for month in month_values.keys():
         value = month_values[month]
         
         # Color based on highest/lowest

@@ -20,7 +20,7 @@ def show_main_menu():
     print("1. Add expense to a specific month")
     print("2. Compare months")
     print("3. Track attribute through months")
-    print("4. Undo last expense")
+    print("4. Undo last expense (Beta)") #TODO: it undo always the last expense, not the last expense of the selected month. Fix it.
     print("5. Exit")
     print()
 
@@ -53,20 +53,20 @@ def compare_months_flow(sql_manager):
         print("[!] No months found for this year.")
         return
     
-    print("\n[+] Available months (in temporal order):")
+    print("\n[+] Available months :")
     for i, month in enumerate(months):
-        print(f"  {i} {month}")
+        print(f"  {i+1} {month}")
     
     month1_idx = ""
-    while not (month1_idx.isdigit() and 0 <= int(month1_idx) < len(months)):
-        month1_idx = input(f"> Select first month (0-{len(months)-1}): ")
-    month1 = months[int(month1_idx)]
+    while not (month1_idx.isdigit() and 1 <= int(month1_idx) <= len(months)):
+        month1_idx = input(f"> Select first month (1-{len(months)}): ")
+    month1 = months[int(month1_idx)-1]
     
     month2_idx = ""
-    while not (month2_idx.isdigit() and 0 <= int(month2_idx) < len(months)):
-        month2_idx = input(f"> Select second month (0-{len(months)-1}): ")
-    month2 = months[int(month2_idx)]
-    
+    while not (month2_idx.isdigit() and 1 <= int(month2_idx) <= len(months)):
+        month2_idx = input(f"> Select second month (1-{len(months)}): ")
+    month2 = months[int(month2_idx)-1]
+
     data1, data2 = sql_manager.compare_months(month1, month2)
     months_data = {month1: data1, month2: data2}
     print_months_comparison(months_data, SQL_ATTRIBUTES_ALL)
