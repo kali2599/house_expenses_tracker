@@ -46,7 +46,7 @@ def select_year_and_month(sql_manager):
     return month
 
 def compare_months_flow(sql_manager):
-    """Flow for comparing two months"""
+    """Flow for comparing multiple months"""
     year = select_year()
     months = sql_manager.get_months_list(year)
     if not months:
@@ -57,18 +57,23 @@ def compare_months_flow(sql_manager):
     for i, month in enumerate(months):
         print(f"  {i+1} {month}")
     
-    month1_idx = ""
-    while not (month1_idx.isdigit() and 1 <= int(month1_idx) <= len(months)):
-        month1_idx = input(f"> Select first month (1-{len(months)}): ")
-    month1 = months[int(month1_idx)-1]
+    count = ""
+    while not (count.isdigit() and 2 <= int(count) <= len(months)):
+        count = input(f"> How many months do you want to compare? (2-{len(months)}): ")
     
-    month2_idx = ""
-    while not (month2_idx.isdigit() and 1 <= int(month2_idx) <= len(months)):
-        month2_idx = input(f"> Select second month (1-{len(months)}): ")
-    month2 = months[int(month2_idx)-1]
+    selected = []
+    for n in range(1, int(count) + 1):
+        idx = ""
+        while not (idx.isdigit() and 1 <= int(idx) <= len(months)):
+            idx = input(f"> Select month {n} (1-{len(months)}): ")
+        m = months[int(idx) - 1]
+        if m in selected:
+            print("[!] Month already selected.")
+            n -= 1
+        else:
+            selected.append(m)
 
-    data1, data2 = sql_manager.compare_months(month1, month2)
-    months_data = {month1: data1, month2: data2}
+    months_data = sql_manager.get_months_data(selected)
     print_months_comparison(months_data, SQL_ATTRIBUTES_ALL)
 
 def track_attribute_flow(sql_manager):

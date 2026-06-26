@@ -115,7 +115,7 @@ def print_months_comparison(months_data, attributes):
 
     max_attr_len = max(len(attr) for attr in attributes)
     head_color = settings.MONTH_HEADER_COLOR
-    sorted_months = sorted(months_data.keys())
+    sorted_months = months_data.keys()
     
     # Print header
     print(f"\n{head_color}--- MONTHS COMPARISON -------\033[0m")

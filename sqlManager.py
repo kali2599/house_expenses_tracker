@@ -5,34 +5,38 @@ class SQLManager:
         self.conn = sqlite3.connect(database)
         self.cursor = self.conn.cursor()
 
+    def _validate_attribute(self, attribute):
+        if attribute not in settings.SQL_ATTRIBUTES_ALL:
+            raise ValueError(f"Invalid column name: {attribute}")
+
     def get_data_by_month(self, month):
-        data = self.cursor.execute(f"SELECT * FROM spese_mensili WHERE mese = '{month}'").fetchall()[0]
+        data = self.cursor.execute("SELECT * FROM spese_mensili WHERE mese = ?", (month,)).fetchone()
         return data
 
     def get_value_by_attrANDmonth(self, month, attribute):
-        data = self.cursor.execute(f"SELECT {attribute} FROM spese_mensili WHERE mese = '{month}'").fetchone()[0]
+        self._validate_attribute(attribute)
+        data = self.cursor.execute(f"SELECT {attribute} FROM spese_mensili WHERE mese = ?", (month,)).fetchone()[0]
         return round(float(data),2)
 
     def update_value_by_attrANDmonth(self, month, attribute, new_value):
-        self.cursor.execute(f"UPDATE spese_mensili SET {attribute} =  {new_value} WHERE mese = '{month}'")
+        self._validate_attribute(attribute)
+        self.cursor.execute(f"UPDATE spese_mensili SET {attribute} = ? WHERE mese = ?", (new_value, month))
 
     def insert_expense_in_registry(self, category, nota, amount):
-        self.cursor.execute(f"INSERT INTO registro_spese (categoria, nota, importo) VALUES ('{category}', '{nota}', {amount})")
+        self.cursor.execute("INSERT INTO registro_spese (categoria, nota, importo) VALUES (?, ?, ?)", (category, nota, amount))
 
     def check_month_exists(self, month) -> bool:
-        data = self.cursor.execute(f"SELECT COUNT(*) FROM spese_mensili WHERE mese = '{month}'").fetchone()[0]
+        data = self.cursor.execute("SELECT COUNT(*) FROM spese_mensili WHERE mese = ?", (month,)).fetchone()[0]
         return data > 0
     
     def add_month_entry(self, month):
         columns_info = self.cursor.execute("PRAGMA table_info(spese_mensili)").fetchall()  
-        # Get column names from the table schema
         columns = [col[1] for col in columns_info]  
-        #print(f"[DEBUG] Columns in spese_mensili: {columns}")  # Debug print to check column names
         columns_str = ', '.join(columns)
-        values_str = ', '.join(['0'] * (len(columns) - 1)) # -1 to excluding the 'month' column
-        values_str = f"'{month}', " + values_str
-        query = f"INSERT INTO spese_mensili ({columns_str}) VALUES ({values_str})"
-        self.cursor.execute(query)
+        placeholders = ', '.join(['?'] * len(columns))
+        values = (month,) + tuple([0] * (len(columns) - 1))
+        query = f"INSERT INTO spese_mensili ({columns_str}) VALUES ({placeholders})"
+        self.cursor.execute(query, values)
         self.commit()  
 
     def commit(self):
@@ -45,12 +49,10 @@ class SQLManager:
     def get_months_list(self, year=None):
         """Get list of all months available in database, optionally filtered by year, sorted temporally"""
         if year:
-            query = f"SELECT mese FROM spese_mensili WHERE mese LIKE '{year}_%' ORDER BY mese"
+            data = self.cursor.execute("SELECT mese FROM spese_mensili WHERE mese LIKE ? ORDER BY mese", (f'{year}_%',)).fetchall()
         else:
-            query = "SELECT mese FROM spese_mensili ORDER BY mese"
-        data = self.cursor.execute(query).fetchall()
+            data = self.cursor.execute("SELECT mese FROM spese_mensili ORDER BY mese").fetchall()
         months = [month[0] for month in data]
-        # Sort temporally: extract year and month, then sort
         months_sorted = sorted(months, key=lambda x: (int(x.split('_')[0]), self._get_month_number(x.split('_')[1])))
         return months_sorted
 
@@ -63,15 +65,14 @@ class SQLManager:
         }
         return months_map.get(month_name, 0)
 
-    def compare_months(self, month1, month2):
-        """Compare two months and return their values for all attributes"""
-        data1 = self.get_data_by_month(month1)
-        data2 = self.get_data_by_month(month2)
-        return data1, data2
+    def get_months_data(self, months):
+        """Get full row data for a list of months, returns {month: tuple}"""
+        return {month: self.get_data_by_month(month) for month in months}
 
     # FEATURE 2: Track single attribute through several months
     def get_attribute_through_months(self, attribute, months):
         """Get a specific attribute value across multiple months"""
+        self._validate_attribute(attribute)
         result = {}
         for month in months:
             if self.check_month_exists(month):
@@ -90,7 +91,7 @@ class SQLManager:
         last_expense = self.get_last_expense()
         if last_expense:
             expense_id, category, nota, amount = last_expense
-            self.cursor.execute(f"DELETE FROM registro_spese WHERE id = {expense_id}")
+            self.cursor.execute("DELETE FROM registro_spese WHERE id = ?", (expense_id,))
             return last_expense
         return None
 
@@ -99,9 +100,7 @@ class SQLManager:
         last_expense = self.get_last_expense()
         if last_expense:
             expense_id, category, nota, amount = last_expense
-            # Delete from registry
-            self.cursor.execute(f"DELETE FROM registro_spese WHERE id = {expense_id}")
-            # Subtract from monthly total
+            self.cursor.execute("DELETE FROM registro_spese WHERE id = ?", (expense_id,))
             current_value = self.get_value_by_attrANDmonth(month, category)
             new_value = current_value - amount
             self.update_value_by_attrANDmonth(month, category, new_value)

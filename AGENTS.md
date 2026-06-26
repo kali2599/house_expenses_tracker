@@ -23,6 +23,6 @@ python main.py                # run CLI
 
 ## Conventions
 
-- All SQL queries use **f-strings with direct interpolation** (`f"SELECT ... WHERE mese = '{month}'"`) — be careful with quoting when editing.
+- All SQL queries use **parameterized `?` placeholders** — never interpolate values directly. Dynamic column names are validated against `SQL_ATTRIBUTES_ALL` in `settings.py`.
 - Entries in the expense registry (`registro_spese`) are NOT linked to a specific month; the undo feature always undoes the **global last** expense, not the last one for the selected month (known bug documented in `main.py:23`).
 - Month format in DB: `YYYY_MESE` (e.g. `2026_GENNAIO`).
