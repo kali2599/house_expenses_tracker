@@ -79,12 +79,11 @@ def print_row_table(row, attributes):
 
 
 def get_color_for_attribute(attribute, value=None):
-    #TODO: Add value-based coloring for delta if needed
     """
         Get the appropriate color for an attribute.
         
         :param attribute: the attribute name
-        :param value: the value of the attribute (optional)
+        :param value: the value of the attribute (optional, needed for delta)
         :return: ANSI color code
     """
     if attribute == 'entrate':
@@ -96,6 +95,8 @@ def get_color_for_attribute(attribute, value=None):
     elif attribute == 'uscite_totali':
         return settings.USCITE_TOTALI_COLOR
     elif attribute == 'delta':
+        if value is not None:
+            return settings.DELTA_RED_COLOR if value < 0 else settings.DELTA_GREEN_COLOR
         return ""
     else:
         return "\033[0m"
@@ -135,7 +136,8 @@ def print_months_comparison(months_data, attributes):
             data = months_data[month]
             if data:
                 value = round(float(data[attr_idx]), 2)
-                row_str += f"{color}{str(value).ljust(12)}\033[0m | "
+                cell_color = get_color_for_attribute(attr, value)
+                row_str += f"{cell_color}{str(value).ljust(12)}\033[0m | "
         print(row_str.rstrip(" | "))
     
     print(f"{head_color}---------------------------------------------\033[0m\n")
