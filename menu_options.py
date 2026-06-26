@@ -9,7 +9,7 @@ def show_main_menu():
     print("1. Add expense to a specific month")
     print("2. Compare months")
     print("3. Track attribute through months")
-    print("4. Undo last expense (Beta)") #TODO: it undo always the last expense, not the last expense of the selected month. Fix it.
+    print("4. Undo last expense (Beta)") 
     print("5. Show expense history")
     print("6. Exit")
     print()
@@ -124,6 +124,8 @@ def track_attribute_option(sql_manager):
 
 ## OPTIONS 4: undo last expense (BETA)
 def undo_expense_option(sql_manager):
+    #TODO: link last expense to the selected month, not globally. 
+    #To do it is it necessary to alter the table registro_spese to include the month
     """Flow for undoing the last expense"""
     month = select_year_and_month(sql_manager)
     last_expense = sql_manager.get_last_expense()
@@ -147,8 +149,8 @@ def undo_expense_option(sql_manager):
         print("[+] Undo cancelled.")
 
 
-## OPTIONS 5: track a specific attribute over time
-def show_register_option(sql_manager):
+## OPTIONS 5: show expense history
+def show_expense_history_option(sql_manager):
     """Flow for viewing expense history with optional date range"""
     start_raw = input("> Start date (YYYY-MM-DD, ENTER for no bound): ").strip()
     end_raw = input("> End date (YYYY-MM-DD, ENTER for no bound): ").strip()

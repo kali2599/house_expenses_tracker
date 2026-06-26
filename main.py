@@ -66,7 +66,7 @@ def main(args : list):
             sql_manager.commit()
 
         elif menu_choice == "5":
-            show_register_option(sql_manager)
+            show_expense_history_option(sql_manager)
 
         elif menu_choice == "6":
             print("[+] Exiting...")
