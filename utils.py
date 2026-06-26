@@ -1,6 +1,7 @@
+import calendar
 import settings
 from argparse import ArgumentParser
-from datetime import  datetime
+from datetime import datetime
 
 def handle_args():
     """
@@ -142,6 +143,95 @@ def print_months_comparison(months_data, attributes):
     
     print(f"{head_color}---------------------------------------------\033[0m\n")
 
+
+def parse_date_bound(raw, bound):
+    """
+        Parse a relaxed date input into YYYY-MM-DD or None.
+        - ""          -> None
+        - "2026"       -> "2026-01-01" (start) / "2026-12-31" (end)
+        - "2026-3"     -> "2026-03-01" (start) / last day of March (end)
+        - "2026-03-15" -> as-is
+    """
+    if not raw:
+        return None
+
+    parts = raw.split("-")
+    if len(parts) == 1:
+        year = parts[0]
+        if len(year) != 4 or not year.isdigit():
+            print(f"[!] Invalid year: {year}")
+            return None
+        if bound == "start":
+            return f"{year}-01-01"
+        else:
+            return f"{year}-12-31"
+
+    if len(parts) == 2:
+        year, month = parts
+        if len(year) != 4 or not year.isdigit() or not month.isdigit():
+            print(f"[!] Invalid date: {raw}")
+            return None
+        month = int(month)
+        if month < 1 or month > 12:
+            print(f"[!] Invalid month: {month}")
+            return None
+        if bound == "start":
+            return f"{year}-{month:02d}-01"
+        else:
+            last = calendar.monthrange(int(year), month)[1]
+            return f"{year}-{month:02d}-{last:02d}"
+
+    if len(parts) == 3:
+        year, month, day = parts
+        if not year.isdigit() or not month.isdigit() or not day.isdigit():
+            print(f"[!] Invalid date: {raw}")
+            return None
+        year, month, day = int(year), int(month), int(day)
+        if month < 1 or month > 12:
+            print(f"[!] Invalid month: {month}")
+            return None
+        if day < 1 or day > 31:
+            print(f"[!] Invalid day: {day}")
+            return None
+        return f"{year:04d}-{month:02d}-{day:02d}"
+
+    print(f"[!] Invalid date format: {raw}")
+    return None
+
+def print_registro_entries(entries):
+    """
+        Prints registro_spese entries in a table.
+        
+        :param entries: list of tuples (id, data, categoria, nota, importo)
+    """
+    if not entries:
+        print("[!] No entries found.")
+        return
+
+    note_lens = [len(e[3]) for e in entries]
+    max_nota_len = max(max(note_lens), 20)
+
+    print(f"\n{'ID'.ljust(4)} | {'Date'.ljust(20)} | {'Category'.ljust(16)} | {'Note'.ljust(max_nota_len)} | {'Amount'.rjust(8)}")
+    print("-" * (4 + 3 + 20 + 3 + 16 + 3 + max_nota_len + 3 + 8))
+    head_color = settings.MONTH_HEADER_COLOR
+    month_counts = {}
+    for entry in entries:
+        m = entry[1][:7]
+        month_counts[m] = month_counts.get(m, 0) + 1
+    prev_month = None
+    for entry in entries:
+        eid, data, categoria, nota, importo = entry
+        cur_month = data[:7]
+        if cur_month != prev_month:
+            year = int(data[:4])
+            month_num = int(data[5:7])
+            month_name = settings.MONTHS_INDEX[month_num]
+            count = month_counts[cur_month]
+            print(f"{head_color}--- {year} {month_name} ({count}) ---\033[0m")
+            prev_month = cur_month
+        importo = round(float(importo), 2)
+        print(f"{str(eid).ljust(4)} | {data.ljust(20)} | {categoria.ljust(16)} | {nota.ljust(max_nota_len)} | {str(importo).rjust(8)}")
+    print()
 
 def print_attribute_tracking(attribute, month_values):
     """

@@ -21,7 +21,8 @@ def show_main_menu():
     print("2. Compare months")
     print("3. Track attribute through months")
     print("4. Undo last expense (Beta)") #TODO: it undo always the last expense, not the last expense of the selected month. Fix it.
-    print("5. Exit")
+    print("5. Show expense history")
+    print("6. Exit")
     print()
 
 def select_year_and_month(sql_manager):
@@ -166,6 +167,19 @@ def add_expense_flow(sql_manager):
             insert = False
 
 
+def show_registro_flow(sql_manager):
+    """Flow for viewing expense history with optional date range"""
+    start_raw = input("> Start date (YYYY-MM-DD, ENTER for no bound): ").strip()
+    end_raw = input("> End date (YYYY-MM-DD, ENTER for no bound): ").strip()
+    start = parse_date_bound(start_raw, "start")
+    end = parse_date_bound(end_raw, "end")
+    if start_raw and not start:
+        return
+    if end_raw and not end:
+        return
+    entries = sql_manager.get_registro_entries(start, end)
+    print_registro_entries(entries)
+
 def main(args : list):
     print(f"\n=== HOUSE EXPENSES TRACKER {datetime.now().year} ===\n")
     global sql_manager
@@ -197,7 +211,7 @@ def main(args : list):
     # MAIN MENU LOOP
     while True:
         show_main_menu()
-        menu_choice = input("> Select an option (1-5): ")
+        menu_choice = input("> Select an option (1-6): ")
         
         if menu_choice == "1":
             add_expense_flow(sql_manager)
@@ -210,6 +224,8 @@ def main(args : list):
             undo_expense_flow(sql_manager)
             sql_manager.commit()
         elif menu_choice == "5":
+            show_registro_flow(sql_manager)
+        elif menu_choice == "6":
             print("[+] Exiting...")
             break
         else:

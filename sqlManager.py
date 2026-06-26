@@ -80,6 +80,23 @@ class SQLManager:
                 result[month] = value
         return result
 
+    # FEATURE 4: View registro entries with date range
+    def get_registro_entries(self, start_date=None, end_date=None):
+        """Get entries from registro_spese filtered by optional date range (YYYY-MM-DD)"""
+        query = "SELECT id, data, categoria, nota, importo FROM registro_spese"
+        params = []
+        conditions = []
+        if start_date:
+            conditions.append("date(data) >= ?")
+            params.append(start_date)
+        if end_date:
+            conditions.append("date(data) <= ?")
+            params.append(end_date)
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+        query += " ORDER BY data"
+        return self.cursor.execute(query, params).fetchall()
+
     # FEATURE 3: Undo functionality
     def get_last_expense(self):
         """Get the last expense inserted"""
