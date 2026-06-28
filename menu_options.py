@@ -40,18 +40,32 @@ def add_expense_option(sql_manager):
         attribute = SQL_ATTRIBUTES_EDITABLE[int(attribute_id)]
         print(f"[+] Selected attribute: {attribute}\n")
 
-        # ADD EXPENSE VALUE
+        back_to_attr = False
         while True:
-            value = input("> Insert a numeric value: ")
-            try:
-                value = round(float(value),1)
+            # ADD EXPENSE VALUE
+            back_to_attr = False
+            while True:
+                value_raw = input("> Insert a numeric value ('..' to change attribute): ")
+                if value_raw.strip() == '..':
+                    back_to_attr = True
+                    break
+                try:
+                    value = round(float(value_raw), 1)
+                    break
+                except:
+                    print("[!] Invalid value. Please insert a numeric value.")
+            if back_to_attr:
                 break
-            except:
-                print("[!] Invalid value. Please insert a numeric value.")
 
-        # ADD NOTA
-        nota = input("> Add a note for this expense (enter to skip): ")
-        nota = 'N/A' if nota == "" else nota
+            # ADD NOTA
+            nota = input("> Add a note for this expense ('..' to re-enter value): ")
+            if nota.strip() == '..':
+                continue
+            nota = 'N/A' if nota == "" else nota
+            break
+
+        if back_to_attr:
+            continue
         sql_manager.insert_expense_in_registry(attribute, nota, value)
         print("[+] Expense added in the registry")
         
@@ -75,24 +89,43 @@ def compare_months_option(sql_manager):
     if not months:
         print("[!] No months found for this year.")
         return
-    
-    print("\n[+] Available months :")
-    for i, month in enumerate(months):
-        print(f"  {i+1} {month}")
-    
-    count = ""
-    while not (count.isdigit() and 2 <= int(count) <= len(months)):
-        count = input(f"> How many months do you want to compare? (2-{len(months)}): ")
+
+    if len(months) == 1:
+        print(f"\n[+] Only one month available: {months[0]}")
+        months_data = sql_manager.get_months_data(months)
+        print_months_comparison(months_data, SQL_ATTRIBUTES_ALL)
+        return
     
     selected = []
-    for n in range(1, int(count) + 1):
-        idx = ""
-        while not (idx.isdigit() and 1 <= int(idx) <= len(months)):
-            idx = input(f"> Select month {n} (1-{len(months)}): ")
+    while True:
+        print("\n[+] Available months :")
+        for i, month in enumerate(months):
+            print(f"  {i+1} {month}")
+
+        if selected:
+            print(f"\n[+] Selected so far: {', '.join(selected)}")
+
+        idx = input(f"> Select month (1-{len(months)}), or press ENTER when done: ").strip()
+
+        if idx == "":
+            if not selected:
+                print("[!] Select at least one month.")
+                continue
+            print(f"\n[+] You selected: {', '.join(selected)}")
+            confirm = input("> Confirm? (ENTER/n): ").strip().lower()
+            if confirm == "":
+                break
+            else:
+                selected = []
+                continue
+
+        if not idx.isdigit() or not (1 <= int(idx) <= len(months)):
+            print("[!] Invalid selection.")
+            continue
+
         m = months[int(idx) - 1]
         if m in selected:
             print("[!] Month already selected.")
-            n -= 1
         else:
             selected.append(m)
 

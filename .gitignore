@@ -3,4 +3,4 @@ populate.sql
 push_db.sh
 database_path
 test.sh
-.venv/
+venv/
