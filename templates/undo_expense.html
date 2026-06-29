@@ -1,0 +1,42 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2>Undo Last Expense</h2>
+
+{% if not last_expense %}
+<form method="post">
+  <label>Month:</label>
+  <select name="month">
+    {% for m in range(1, 13) %}
+    <option value="{{ m }}">{{ MONTHS_INDEX[m] }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit" name="action" value="show">Show last expense</button>
+</form>
+{% endif %}
+
+{% if last_expense and not done %}
+<div class="card">
+  <h3>Last expense to undo</h3>
+  <table class="undo-table">
+    <tr><td>ID</td><td>{{ last_expense[0] }}</td></tr>
+    <tr><td>Date</td><td>{{ last_expense[1] }}</td></tr>
+    <tr><td>Category</td><td>{{ last_expense[2] }}</td></tr>
+    <tr><td>Note</td><td>{{ last_expense[3] }}</td></tr>
+    <tr><td>Amount</td><td>{{ "%.2f"|format(last_expense[4]) }}</td></tr>
+  </table>
+  <form method="post">
+    <input type="hidden" name="month" value="{{ month }}">
+    <input type="hidden" name="action" value="undo">
+    <button type="submit" class="danger">Confirm undo</button>
+    <a href="/undo-expense" class="button">Cancel</a>
+  </form>
+</div>
+{% endif %}
+
+{% if done %}
+<div class="card success">
+  <p>Expense undone successfully.</p>
+  <a href="/undo-expense">Undo another</a>
+</div>
+{% endif %}
+{% endblock %}

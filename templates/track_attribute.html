@@ -1,0 +1,35 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2>Track Attribute Through Months</h2>
+
+<form method="post">
+  <label>Attribute:</label>
+  <select name="attribute">
+    {% for attr in SQL_ATTRIBUTES_EDITABLE %}
+    <option value="{{ attr }}" {% if attr == selected_attr %}selected{% endif %}>{{ attr }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit">Track</button>
+</form>
+
+{% if month_values %}
+<div class="card">
+  <table class="track-table">
+    <tr>
+      <th>Month</th>
+      <th>Value</th>
+    </tr>
+    {% set max_val = month_values.values() | max %}
+    {% set min_val = month_values.values() | min %}
+    {% for m, v in month_values.items() %}
+    <tr>
+      <td>{{ m }}</td>
+      <td class="{% if v == max_val %}high{% elif v == min_val %}low{% endif %}">
+        {{ "%.2f"|format(v) }}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+{% endblock %}

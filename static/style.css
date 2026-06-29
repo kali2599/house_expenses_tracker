@@ -1,0 +1,34 @@
+body {
+  font-family: sans-serif; margin: 0; padding: 0; background: #f5f5f5;
+}
+#nav {
+  background: #333; color: #fff; padding: 10px 20px; display: flex; align-items: center; gap: 15px; flex-wrap: wrap;
+}
+#nav a { color: #ccc; text-decoration: none; }
+#nav a:hover { color: #fff; }
+.nav-title { font-weight: bold; color: #fff; margin-right: 15px; }
+.nav-year { margin-left: auto; color: #999; font-size: 0.9em; }
+.small-link { color: #6af; font-size: 0.9em; }
+#content { max-width: 900px; margin: 20px auto; padding: 0 15px; }
+.flash { padding: 10px; margin: 10px 0; border-radius: 4px; }
+.flash.success { background: #d4edda; color: #155724; }
+.flash.error { background: #f8d7da; color: #721c24; }
+.card { background: #fff; padding: 15px; margin: 15px 0; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+.card.success { background: #d4edda; }
+h2 { margin-top: 0; }
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid #ddd; }
+th { background: #f0f0f0; font-weight: bold; }
+tr.month-header td { background: #e0e0e0; font-weight: bold; text-align: center; }
+.entrate { color: #0055cc; }
+.uscite { color: #996600; }
+.uscite-totali { color: #cc0000; }
+.delta-positivo { color: #008800; }
+.delta-negativo { color: #cc0000; }
+.high { color: #cc0000; font-weight: bold; }
+.low { color: #008800; font-weight: bold; }
+.danger { background: #dc3545; color: #fff; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
+button, .button { background: #007bff; color: #fff; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; text-decoration: none; display: inline-block; }
+button:hover { opacity: 0.9; }
+input, select { padding: 6px; border: 1px solid #ccc; border-radius: 4px; margin: 5px 0; }
+label { display: inline-block; margin: 5px 0; }

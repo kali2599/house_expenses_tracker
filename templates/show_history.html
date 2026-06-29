@@ -1,0 +1,50 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2>Expense History</h2>
+
+<form method="post">
+  <label>Start date (YYYY-MM-DD, leave empty for no bound):</label>
+  <input type="text" name="start_date" value="{{ start_date or '' }}"><br>
+  <label>End date (YYYY-MM-DD, leave empty for no bound):</label>
+  <input type="text" name="end_date" value="{{ end_date or '' }}"><br>
+  <button type="submit">Show</button>
+</form>
+
+{% if entries is defined %}
+<div class="card">
+  {% if entries %}
+  <table class="history-table">
+    <tr>
+      <th>ID</th>
+      <th>Date</th>
+      <th>Category</th>
+      <th>Note</th>
+      <th>Amount</th>
+    </tr>
+    {% set ns = namespace(prev_month=None) %}
+    {% for entry in entries %}
+    {% set cur_month = entry[1][:7] %}
+    {% if cur_month != ns.prev_month %}
+    <tr class="month-header">
+      <td colspan="5">
+        {% set month_num = entry[1][5:7] | int %}
+        {{ entry[1][:4] }} {{ MONTHS_INDEX[month_num] }}
+      </td>
+    </tr>
+    {% set ns.prev_month = cur_month %}
+    {% endif %}
+    <tr>
+      <td>{{ entry[0] }}</td>
+      <td>{{ entry[1] }}</td>
+      <td>{{ entry[2] }}</td>
+      <td>{{ entry[3] }}</td>
+      <td>{{ "%.2f"|format(entry[4]) }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p>No entries found.</p>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

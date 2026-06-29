@@ -110,7 +110,7 @@ class SQLManager:
 
     def get_last_expense(self):
         """Get the last expense inserted"""
-        data = self.cursor.execute("SELECT id, categoria, nota, importo FROM registro_spese ORDER BY id DESC LIMIT 1").fetchone()
+        data = self.cursor.execute("SELECT id, data, categoria, nota, importo FROM registro_spese ORDER BY id DESC LIMIT 1").fetchone()
         return data
 
 
@@ -118,7 +118,7 @@ class SQLManager:
         """Delete the last expense and return its details"""
         last_expense = self.get_last_expense()
         if last_expense:
-            expense_id, category, nota, amount = last_expense
+            expense_id, expense_data, category, nota, amount = last_expense
             self.cursor.execute("DELETE FROM registro_spese WHERE id = ?", (expense_id,))
             return last_expense
         return None
@@ -128,7 +128,7 @@ class SQLManager:
         """Undo the last expense: remove it from registry and subtract from monthly total"""
         last_expense = self.get_last_expense()
         if last_expense:
-            expense_id, category, nota, amount = last_expense
+            expense_id, expense_data, category, nota, amount = last_expense
             self.cursor.execute("DELETE FROM registro_spese WHERE id = ?", (expense_id,))
             current_value = self.get_value_by_attrANDmonth(month, category)
             new_value = current_value - amount

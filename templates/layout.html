@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>House Expenses Tracker</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div id="nav">
+  <span class="nav-title">House Expenses Tracker</span>
+  <a href="/add-expense">Add Expense</a>
+  <a href="/compare-months">Compare Months</a>
+  <a href="/track-attribute">Track Attribute</a>
+  <a href="/undo-expense">Undo Expense</a>
+  <a href="/show-history">Show History</a>
+  <span class="nav-year">
+    Year: {{ current_year }}
+    <a href="/change-year" class="small-link">[change]</a>
+  </span>
+</div>
+<div id="content">
+{% for category, message in get_flashed_messages(with_categories=true) %}
+  <div class="flash {{ category }}">{{ message }}</div>
+{% endfor %}
+{% block content %}{% endblock %}
+</div>
+</body>
+</html>

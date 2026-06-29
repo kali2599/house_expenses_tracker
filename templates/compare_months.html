@@ -1,0 +1,38 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2>Compare Months</h2>
+
+<form method="post">
+  <p>Select months to compare:</p>
+  {% for m in months %}
+  <label>
+    <input type="checkbox" name="selected_months" value="{{ m }}"
+      {% if m in selected %}checked{% endif %}> {{ m }}
+  </label><br>
+  {% endfor %}
+  <button type="submit">Compare</button>
+</form>
+
+{% if rows %}
+<div class="card">
+  <table class="compare-table">
+    <tr>
+      <th>Attribute</th>
+      {% for m in sorted_months %}
+      <th>{{ m }}</th>
+      {% endfor %}
+      <th>Mean</th>
+    </tr>
+    {% for attr, values, mean in rows %}
+    <tr>
+      <td class="{{ get_color_for_attribute(attr) }}">{{ attr }}</td>
+      {% for v in values %}
+      <td class="{{ get_color_for_attribute(attr, v) }}">{{ "%.2f"|format(v) }}</td>
+      {% endfor %}
+      <td class="{{ get_color_for_attribute(attr, mean) }}">{{ "%.2f"|format(mean) }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+{% endblock %}
