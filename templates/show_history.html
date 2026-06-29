@@ -28,7 +28,7 @@
     <tr class="month-header">
       <td colspan="5">
         {% set month_num = entry[1][5:7] | int %}
-        {{ entry[1][:4] }} {{ MONTHS_INDEX[month_num] }}
+        {{ entry[1][:4] }} {{ MONTHS_INDEX[month_num] }} ({{ month_counts[cur_month] }})
       </td>
     </tr>
     {% set ns.prev_month = cur_month %}

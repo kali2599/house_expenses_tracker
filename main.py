@@ -55,10 +55,14 @@ def add_expense():
         month_raw = request.form.get('month')
         action = request.form.get('action', '')
 
-        if month_raw and month_raw.isdigit():
-            month_num = int(month_raw)
-            month_name = MONTHS_INDEX[month_num]
-            month = f"{year}_{month_name}"
+        if month_raw:
+            if '_' in month_raw:
+                month = month_raw
+                month_name = month.split('_')[1]
+            elif month_raw.isdigit():
+                month_num = int(month_raw)
+                month_name = MONTHS_INDEX[month_num]
+                month = f"{year}_{month_name}"
 
         if action == 'select_month':
             ensure_month(sm, month)
@@ -95,7 +99,8 @@ def compare_months():
             flash("Select at least one month.", "error")
         else:
             months_data = sm.get_months_data(selected)
-            sorted_months = sorted(selected)
+            all_sorted = sm.get_months_list(year)
+            sorted_months = [m for m in all_sorted if m in selected]
             rows = []
             for attr_idx, attr in enumerate(SQL_ATTRIBUTES_ALL):
                 if attr == 'mese':
@@ -184,6 +189,7 @@ def show_history():
 
     start = end = None
     entries = None
+    month_counts = {}
     if request.method == 'POST':
         start_raw = request.form.get('start_date', '').strip()
         end_raw = request.form.get('end_date', '').strip()
@@ -195,9 +201,14 @@ def show_history():
             flash("Invalid end date.", "error")
         else:
             entries = sm.get_registro_entries(start, end)
+            for e in entries:
+                m = e[1][:7]
+                month_counts[m] = month_counts.get(m, 0) + 1
 
     return render_template('show_history.html',
-        entries=entries, start_date=start, end_date=end, current_year=session.get('year'))
+        entries=entries, start_date=start, end_date=end,
+        month_counts=month_counts,
+        current_year=session.get('year'))
 
 
 # ---- Change Year ----
