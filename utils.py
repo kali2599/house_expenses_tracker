@@ -14,24 +14,18 @@ def select_year() -> int:
 
         :return: selected year as integer
     """
-    year = datetime.now().year
-    year_input = input(f"> Select current year? (ENTER/n): ")
-    if year_input.lower() == 'y' or year_input == '':
-        print()
-    else:
-        year_input = input("> Insert year (e.g., 2024): ")
-        try:
-            year = int(year_input)
-        except:
-            print("[!] Invalid year. Using current year.")
-        print()
+    year_input = input("> Insert year (e.g., 2024): ")
+    try:
+        year = int(year_input)
+    except:
+        print("[!] Invalid year. Using current year.")
+    print()
 
     return year
 
 
-def select_year_and_month(sql_manager):
-    """Allow user to select a year and month"""
-    year = select_year()
+def select_year_and_month(sql_manager, year):
+    """Allow user to select a month for the given year"""
     print_months()
     month_id = ""
     while not (month_id.isdigit() and 1 <= int(month_id) <= 12):

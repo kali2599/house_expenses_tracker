@@ -18,7 +18,8 @@ signal.signal(signal.SIGINT, handle_sigint_aux)
 
 
 def main(args : list):
-    print(f"\n=== HOUSE EXPENSES TRACKER {datetime.now().year} ===\n")
+    current_year = datetime.now().year
+    print(f"\n=== HOUSE EXPENSES TRACKER  ===\n")
     global sql_manager
 
     ## CHECK DATABASE PATH FILE EXISTS
@@ -48,27 +49,30 @@ def main(args : list):
     # MAIN MENU LOOP
     while True:
 
-        show_main_menu()
-        menu_choice = input("> Select an option (1-6): ")
+        show_main_menu(current_year)
+        menu_choice = input("> Select an option (1-7): ")
         
         if menu_choice == "1":
-            add_expense_option(sql_manager)
+            add_expense_option(sql_manager, current_year)
             sql_manager.commit()
 
         elif menu_choice == "2":
-            compare_months_option(sql_manager)
+            compare_months_option(sql_manager, current_year)
 
         elif menu_choice == "3":
-            track_attribute_option(sql_manager)
+            track_attribute_option(sql_manager, current_year)
 
         elif menu_choice == "4":
-            undo_expense_option(sql_manager)
+            undo_expense_option(sql_manager, current_year)
             sql_manager.commit()
 
         elif menu_choice == "5":
             show_expense_history_option(sql_manager)
 
         elif menu_choice == "6":
+            current_year = change_year_option(current_year)
+
+        elif menu_choice == "7":
             print("[+] Exiting...")
             break
 

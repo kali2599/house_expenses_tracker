@@ -3,15 +3,16 @@ from settings import *
 
 
 
-def show_main_menu():
+def show_main_menu(current_year):
     """Display main menu options"""
-    print("\n=== MAIN MENU ===")
+    print(f"\n=== MAIN MENU (year: {current_year}) ===")
     print("1. Add expense to a specific month")
     print("2. Compare months")
     print("3. Track attribute through months")
     print("4. Undo last expense (Beta)") 
     print("5. Show expense history")
-    print("6. Exit")
+    print(f"6. Change year (currently: {current_year})")
+    print("7. Exit")
     print()
 
 
@@ -21,9 +22,9 @@ def show_main_menu():
 
 
 ## OPTIONS 1 : add expense for a specific month
-def add_expense_option(sql_manager):
+def add_expense_option(sql_manager, current_year):
     """Flow for adding expenses"""
-    month = select_year_and_month(sql_manager)
+    month = select_year_and_month(sql_manager, current_year)
     
     # Display current month values
     data = sql_manager.get_data_by_month(month)
@@ -82,10 +83,9 @@ def add_expense_option(sql_manager):
 
 
 ## OPTIONS 2: compare months expenses
-def compare_months_option(sql_manager):
+def compare_months_option(sql_manager, current_year):
     """Flow for comparing multiple months"""
-    year = select_year()
-    months = sql_manager.get_months_list(year)
+    months = sql_manager.get_months_list(current_year)
     if not months:
         print("[!] No months found for this year.")
         return
@@ -134,10 +134,9 @@ def compare_months_option(sql_manager):
 
 
 ## OPTION 3: track a specific attribute over time
-def track_attribute_option(sql_manager):
+def track_attribute_option(sql_manager, current_year):
     """Flow for tracking an attribute through months"""
-    year = select_year()
-    months = sql_manager.get_months_list(year)
+    months = sql_manager.get_months_list(current_year)
     if not months:
         print("[!] No months found for this year.")
         return
@@ -156,11 +155,11 @@ def track_attribute_option(sql_manager):
 
 
 ## OPTIONS 4: undo last expense (BETA)
-def undo_expense_option(sql_manager):
+def undo_expense_option(sql_manager, current_year):
     #TODO: link last expense to the selected month, not globally. 
     #To do it is it necessary to alter the table registro_spese to include the month
     """Flow for undoing the last expense"""
-    month = select_year_and_month(sql_manager)
+    month = select_year_and_month(sql_manager, current_year)
     last_expense = sql_manager.get_last_expense()
     if not last_expense:
         print("[!] No expenses to undo.")
@@ -196,5 +195,13 @@ def show_expense_history_option(sql_manager):
     entries = sql_manager.get_registro_entries(start, end)
     print_registro_entries(entries)
 
+
+## OPTIONS 6: change year
+def change_year_option(current_year):
+    """Flow for changing the current year"""
+    new_year = select_year()
+    if new_year != current_year:
+        print(f"[+] Year changed to: {new_year}")
+    return new_year
 
 
