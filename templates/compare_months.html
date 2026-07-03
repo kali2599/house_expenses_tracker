@@ -15,24 +15,124 @@
 
 {% if rows %}
 <div class="card">
-  <table class="compare-table">
-    <tr>
-      <th>Attribute</th>
-      {% for m in sorted_months %}
-      <th>{{ m }}</th>
-      {% endfor %}
-      <th>Mean</th>
-    </tr>
+  <table class="compare-table" id="compare-table">
+    <thead>
+      <tr>
+        <th>Attribute</th>
+        {% for m in sorted_months %}
+        <th>{{ m }}</th>
+        {% endfor %}
+        <th>Mean</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
     {% for attr, values, mean in rows %}
-    <tr>
+    <tr data-attr="{{ attr }}">
       <td class="{{ get_color_for_attribute(attr) }}">{{ attr }}</td>
       {% for v in values %}
       <td class="{{ get_color_for_attribute(attr, v) }}">{{ "%.2f"|format(v) }}</td>
       {% endfor %}
       <td class="{{ get_color_for_attribute(attr, mean) }}">{{ "%.2f"|format(mean) }}</td>
+      <td>
+        {% if attr not in ('uscite_variabili','uscite_fisse','uscite_totali','delta') %}
+        <button class="toggle-btn" onclick="toggleAttr(this)">Disable</button>
+        {% endif %}
+      </td>
     </tr>
     {% endfor %}
+    </tbody>
   </table>
 </div>
+
+<script>
+var VARIABILI = ['spesa','pasti_fuori','svago','shopping','inaspettate','varie','salute','vacanze'];
+var FISSE = ['abbonamenti','investimenti','assicurazioni','condominio','luce','gas','mutuo','lenti','telefonia','parrucchiere','palestra'];
+var COMPUTED = ['uscite_variabili','uscite_fisse','uscite_totali','delta'];
+
+var baseValues = {};
+var rows = {};
+var numMonths;
+
+function initCompare() {
+  numMonths = {{ sorted_months|length }};
+  document.querySelectorAll('#compare-table tbody tr[data-attr]').forEach(function(row) {
+    var attr = row.getAttribute('data-attr');
+    rows[attr] = row;
+    var cells = row.querySelectorAll('td');
+    var vals = [];
+    for (var i = 0; i < numMonths; i++) {
+      vals.push(parseFloat(cells[i + 1].textContent) || 0);
+    }
+    baseValues[attr] = vals;
+  });
+}
+
+function getColor(attr, value) {
+  if (attr === 'entrate') return 'entrate';
+  if (attr === 'uscite_variabili' || attr === 'uscite_fisse') return 'uscite';
+  if (attr === 'uscite_totali') return 'uscite-totali';
+  if (attr === 'delta') return value >= 0 ? 'delta-positivo' : 'delta-negativo';
+  return '';
+}
+
+function getCurrentValue(attr, monthIdx) {
+  var row = rows[attr];
+  if (!row || row.classList.contains('disabled')) return 0;
+  return baseValues[attr][monthIdx];
+}
+
+function setCellValue(attr, monthIdx, value) {
+  var row = rows[attr];
+  if (!row) return;
+  var cells = row.querySelectorAll('td');
+  var cell = cells[monthIdx + 1];
+  cell.textContent = value.toFixed(1);
+  cell.className = getColor(attr, value);
+}
+
+function recalcMean(attr) {
+  var row = rows[attr];
+  if (!row) return;
+  var cells = row.querySelectorAll('td');
+  var sum = 0;
+  for (var i = 0; i < numMonths; i++) {
+    sum += parseFloat(cells[i + 1].textContent) || 0;
+  }
+  var mean = sum / numMonths;
+  cells[numMonths + 1].textContent = mean.toFixed(1);
+  cells[numMonths + 1].className = getColor(attr, mean);
+}
+
+function recalc() {
+  for (var m = 0; m < numMonths; m++) {
+    var uv = 0;
+    VARIABILI.forEach(function(a) { uv += getCurrentValue(a, m); });
+    var uf = 0;
+    FISSE.forEach(function(a) { uf += getCurrentValue(a, m); });
+    var ut = uv + uf;
+    var ent = getCurrentValue('entrate', m);
+    setCellValue('uscite_variabili', m, uv);
+    setCellValue('uscite_fisse', m, uf);
+    setCellValue('uscite_totali', m, ut);
+    setCellValue('delta', m, ent - ut);
+  }
+  recalcMean('uscite_variabili');
+  recalcMean('uscite_fisse');
+  recalcMean('uscite_totali');
+  recalcMean('delta');
+}
+
+function toggleAttr(btn) {
+  var row = btn.closest('tr');
+  var attr = row.getAttribute('data-attr');
+  if (COMPUTED.indexOf(attr) >= 0) return;
+  row.classList.toggle('disabled');
+  btn.textContent = row.classList.contains('disabled') ? 'Enable' : 'Disable';
+  recalc();
+}
+
+initCompare();
+</script>
 {% endif %}
 {% endblock %}
