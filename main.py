@@ -51,6 +51,11 @@ def add_expense():
     sm = get_db()
     year = session.get('year')
 
+    now = datetime.now()
+    month_num = now.month
+    month_name = MONTHS_INDEX[month_num]
+    month = f"{year}_{month_name}"
+
     if request.method == 'POST':
         month_raw = request.form.get('month')
         action = request.form.get('action', '')
@@ -59,6 +64,7 @@ def add_expense():
             if '_' in month_raw:
                 month = month_raw
                 month_name = month.split('_')[1]
+                month_num = int(request.form.get('month_num', month_num))
             elif month_raw.isdigit():
                 month_num = int(month_raw)
                 month_name = MONTHS_INDEX[month_num]
@@ -68,7 +74,8 @@ def add_expense():
             ensure_month(sm, month)
             data = sm.get_data_by_month(month)
             return render_template('add_expense.html', month=month,
-                month_name=month_name, data_row=data, current_year=year)
+                month_name=month_name, month_num=month_num, data_row=data,
+                current_year=year)
 
         if action == 'add':
             attribute = request.form.get('attribute')
@@ -78,11 +85,36 @@ def add_expense():
             old_val = sm.get_value_by_attrANDmonth(month, attribute)
             sm.update_value_by_attrANDmonth(month, attribute, old_val + value)
             sm.commit()
-            flash("Expense added successfully!", "success")
-            return render_template('add_expense.html', done=True,
-                attribute=attribute, value=value, current_year=year)
+            flash("Spesa aggiunta!", "success")
+            data = sm.get_data_by_month(month)
+            return render_template('add_expense.html', month=month,
+                month_name=month_name, month_num=month_num, data_row=data,
+                done=True, inserted=[(attribute, value, nota)], current_year=year)
 
-    return render_template('add_expense.html', month=None, current_year=year)
+        if action == 'add_all':
+            attributes = request.form.getlist('attribute[]')
+            values = request.form.getlist('value[]')
+            notes = request.form.getlist('nota[]')
+            inserted = []
+            for attr, val_raw, nota_raw in zip(attributes, values, notes):
+                val = round(float(val_raw), 1)
+                nota = nota_raw.strip() or 'N/A'
+                sm.insert_expense_in_registry(attr, nota, val)
+                old_val = sm.get_value_by_attrANDmonth(month, attr)
+                sm.update_value_by_attrANDmonth(month, attr, old_val + val)
+                inserted.append((attr, val, nota))
+            sm.commit()
+            flash(f"{len(inserted)} spese aggiunte!", "success")
+            data = sm.get_data_by_month(month)
+            return render_template('add_expense.html', month=month,
+                month_name=month_name, month_num=month_num, data_row=data,
+                done=True, inserted=inserted, current_year=year)
+
+    ensure_month(sm, month)
+    data = sm.get_data_by_month(month)
+    return render_template('add_expense.html', month=month,
+        month_name=month_name, month_num=month_num, data_row=data,
+        current_year=year)
 
 
 # ---- Compare Months ----

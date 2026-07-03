@@ -2,58 +2,121 @@
 {% block content %}
 <h2>Add Expense</h2>
 
-{% if data_row %}
-<div class="card">
-  <h3>Current values for {{ month_name }}</h3>
-  <table class="attr-table">
-    {% for attr, value in zip(SQL_ATTRIBUTES_ALL, data_row) %}
-    {% if attr != 'mese' %}
-    <tr>
-      <td class="{{ get_color_for_attribute(attr, value) }}">{{ attr }}</td>
-      <td class="{{ get_color_for_attribute(attr, value) }}">{{ "%.2f"|format(value) }}</td>
-    </tr>
+<div class="add-expense-layout">
+  <div class="add-expense-left">
+    <div class="card">
+      <h3>{{ month_name }}</h3>
+      <table class="attr-table">
+        <thead>
+          <tr>
+            <th>Attributo</th>
+            <th>Valore (€)</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for attr, value in zip(SQL_ATTRIBUTES_ALL, data_row) %}
+        {% if attr != 'mese' %}
+        <tr class="{{ get_color_for_attribute(attr, value) }}">
+          <td>{{ attr }}</td>
+          <td class="val">{{ "%.2f"|format(value) }}</td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="add-expense-right">
+    <div class="card">
+      <h3>Seleziona mese</h3>
+      <form method="post">
+        <select name="month">
+          {% for m in range(1, 13) %}
+          <option value="{{ m }}" {% if m == month_num %}selected{% endif %}>{{ MONTHS_INDEX[m] }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" name="action" value="select_month">Select</button>
+      </form>
+    </div>
+
+    {% if not done %}
+    <div class="card" id="expense-card">
+      <h3>Aggiungi spese per <strong>{{ month_name }}</strong></h3>
+      <form method="post" id="expense-form">
+        <input type="hidden" name="month" value="{{ month }}">
+        <input type="hidden" name="month_num" value="{{ month_num }}">
+
+        <div id="expense-boxes">
+          <div class="expense-box">
+            <div class="box-header">
+              <span class="box-number">1</span>
+              <button type="button" class="remove-btn" onclick="removeExpenseBox(this)">✕</button>
+            </div>
+            <div class="box-fields">
+              <div class="field-group">
+                <label>Attributo:</label>
+                <select name="attribute[]">
+                  {% for attr in SQL_ATTRIBUTES_EDITABLE %}
+                  <option value="{{ attr }}">{{ attr }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="field-group">
+                <label>Valore:</label>
+                <input type="number" step="0.1" name="value[]" required>
+              </div>
+              <div class="field-group">
+                <label>Nota:</label>
+                <input type="text" name="nota[]" placeholder="N/A">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <button type="button" onclick="addExpenseBox()" class="add-row-btn">+ Add another</button>
+        <button type="submit" name="action" value="add_all" class="submit-all-btn">Insert all</button>
+      </form>
+    </div>
+    {% else %}
+    <div class="card success">
+      <p>{{ inserted|length }} spese aggiunte:</p>
+      <ul class="inserted-list">
+        {% for attr, val, nota in inserted %}
+        <li><strong>{{ attr }}</strong>: {{ "%.2f"|format(val) }} ({{ nota }})</li>
+        {% endfor %}
+      </ul>
+      <a href="/add-expense">Aggiungi altre spese</a>
+    </div>
     {% endif %}
-    {% endfor %}
-  </table>
+  </div>
 </div>
-{% endif %}
 
-{% if not month %}
-<form method="post">
-  <label>Month:</label>
-  <select name="month">
-    {% for m in range(1, 13) %}
-    <option value="{{ m }}">{{ MONTHS_INDEX[m] }}</option>
-    {% endfor %}
-  </select>
-  <button type="submit" name="action" value="select_month">Select month</button>
-</form>
-{% endif %}
-
-{% if month and not done %}
-<div class="card">
-  <p>Adding expense for <strong>{{ month_name }}</strong></p>
-  <form method="post">
-    <input type="hidden" name="month" value="{{ month }}">
-    <label>Attribute:</label>
-    <select name="attribute">
-      {% for attr in SQL_ATTRIBUTES_EDITABLE %}
-      <option value="{{ attr }}">{{ attr }}</option>
-      {% endfor %}
-    </select><br>
-    <label>Value:</label>
-    <input type="number" step="0.1" name="value" required><br>
-    <label>Note:</label>
-    <input type="text" name="nota" placeholder="N/A"><br>
-    <button type="submit" name="action" value="add">Add expense</button>
-  </form>
-</div>
-{% endif %}
-
-{% if done %}
-<div class="card success">
-  <p>Expense added: {{ attribute }} = {{ "%.2f"|format(value) }}</p>
-  <a href="/add-expense">Add another expense</a>
-</div>
-{% endif %}
+<script>
+function addExpenseBox() {
+  var container = document.getElementById('expense-boxes');
+  var boxes = container.querySelectorAll('.expense-box');
+  var template = boxes[0];
+  var newBox = template.cloneNode(true);
+  newBox.querySelectorAll('input, select').forEach(function(el) { el.value = ''; });
+  var num = boxes.length + 1;
+  newBox.querySelector('.box-number').textContent = num;
+  container.appendChild(newBox);
+  updateNumbers();
+}
+function removeExpenseBox(btn) {
+  var container = document.getElementById('expense-boxes');
+  var boxes = container.querySelectorAll('.expense-box');
+  if (boxes.length > 1) {
+    btn.closest('.expense-box').remove();
+    updateNumbers();
+  }
+}
+function updateNumbers() {
+  var container = document.getElementById('expense-boxes');
+  container.querySelectorAll('.expense-box').forEach(function(box, i) {
+    box.querySelector('.box-number').textContent = i + 1;
+  });
+}
+</script>
 {% endblock %}
