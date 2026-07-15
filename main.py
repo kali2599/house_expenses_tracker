@@ -148,9 +148,13 @@ def compare_months():
                 if values:
                     mean = round(sum(values) / len(values), 2)
                     rows.append((attr, values, mean))
+            month_labels = []
+            for m in sorted_months:
+                y, mn = m.split('_')
+                month_labels.append(f"{mn.capitalize()} {y}")
             return render_template('compare_months.html', months=months,
                 selected=selected, sorted_months=sorted_months,
-                rows=rows, current_year=year)
+                rows=rows, month_labels=month_labels, current_year=year)
 
     return render_template('compare_months.html', months=months,
         selected=[], rows=None, current_year=year)

@@ -14,51 +14,269 @@
 </form>
 
 {% if rows %}
-<div class="card">
-  <table class="compare-table" id="compare-table">
-    <thead>
-      <tr>
-        <th>Attribute</th>
-        {% for m in sorted_months %}
-        <th>{{ m }}</th>
-        {% endfor %}
-        <th>Mean</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-    {% for attr, values, mean in rows %}
-    <tr data-attr="{{ attr }}">
-      <td class="{{ get_color_for_attribute(attr) }}">{{ attr }}</td>
+<div class="summary-grid">
+  {% set ns = namespace(tot_entrate=0, tot_uscite=0, tot_delta=0, best_delta=-999999, worst_delta=999999, best_month='', worst_month='') %}
+  {% for attr, values, mean in rows %}
+    {% if attr == 'entrate' %}
+      {% set ns.tot_entrate = values | sum %}
+    {% elif attr == 'uscite_totali' %}
+      {% set ns.tot_uscite = values | sum %}
+    {% elif attr == 'delta' %}
+      {% set ns.tot_delta = values | sum %}
       {% for v in values %}
-      <td class="{{ get_color_for_attribute(attr, v) }}">{{ "%.2f"|format(v) }}</td>
+        {% if v > ns.best_delta %}{% set ns.best_delta = v %}{% set ns.best_month = month_labels[loop.index0] %}{% endif %}
+        {% if v < ns.worst_delta %}{% set ns.worst_delta = v %}{% set ns.worst_month = month_labels[loop.index0] %}{% endif %}
       {% endfor %}
-      <td class="{{ get_color_for_attribute(attr, mean) }}">{{ "%.2f"|format(mean) }}</td>
-      <td>
-        {% if attr not in ('uscite_variabili','uscite_fisse','uscite_totali','delta') %}
-        <button class="toggle-btn" onclick="toggleAttr(this)">Disable</button>
-        {% endif %}
-      </td>
-    </tr>
-    {% endfor %}
-    </tbody>
-  </table>
+    {% endif %}
+  {% endfor %}
+  {% set avg_delta = (ns.tot_delta / sorted_months|length) | round(1) %}
+  <div class="stat-card stat-income">
+    <span class="stat-label">Entrate totali</span>
+    <span class="stat-value">{{ "%.1f"|format(ns.tot_entrate) }}</span>
+  </div>
+  <div class="stat-card stat-expenses">
+    <span class="stat-label">Uscite totali</span>
+    <span class="stat-value">{{ "%.1f"|format(ns.tot_uscite) }}</span>
+  </div>
+  <div class="stat-card stat-delta">
+    <span class="stat-label">Delta medio</span>
+    <span class="stat-value">{{ "%.1f"|format(avg_delta) }}</span>
+  </div>
+  <div class="stat-card stat-best">
+    <span class="stat-label">Migliore</span>
+    <span class="stat-value">{{ ns.best_month }}</span>
+    <span class="stat-sub">{{ "%.1f"|format(ns.best_delta) }}</span>
+  </div>
+  <div class="stat-card stat-worst">
+    <span class="stat-label">Peggiore</span>
+    <span class="stat-value">{{ ns.worst_month }}</span>
+    <span class="stat-sub">{{ "%.1f"|format(ns.worst_delta) }}</span>
+  </div>
 </div>
 
+<div class="tab-bar">
+  <button class="tab active" onclick="switchTab('table')">Tabella</button>
+  <button class="tab" onclick="switchTab('charts')">Grafici</button>
+  <button class="tab" onclick="switchTab('breakdown')">Analisi</button>
+</div>
+
+<div id="panel-table" class="tab-panel active">
+  <div class="card">
+    <table class="compare-table" id="compare-table">
+      <thead>
+        <tr>
+          <th>Attributo</th>
+          {% for m in sorted_months %}
+          <th>{{ month_labels[loop.index0] }}</th>
+          {% endfor %}
+          <th>Media</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for attr, values, mean in rows %}
+      <tr data-attr="{{ attr }}">
+        <td class="{{ get_color_for_attribute(attr) }}">{{ attr }}</td>
+        {% for v in values %}
+        <td class="{{ get_color_for_attribute(attr, v) }}">{{ "%.1f"|format(v) }}</td>
+        {% endfor %}
+        <td class="{{ get_color_for_attribute(attr, mean) }}">{{ "%.1f"|format(mean) }}</td>
+        <td>
+          {% if attr not in ('uscite_variabili','uscite_fisse','uscite_totali','delta') %}
+          <button class="toggle-btn" onclick="toggleAttr(this)">Disable</button>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div id="panel-charts" class="tab-panel">
+  <div class="chart-grid">
+    <div class="chart-card">
+      <h4>Entrate vs Uscite</h4>
+      <canvas id="chart-income"></canvas>
+    </div>
+    <div class="chart-card">
+      <h4>Ripartizione Uscite</h4>
+      <canvas id="chart-stacked"></canvas>
+    </div>
+  </div>
+  {% if sorted_months|length >= 3 %}
+  <div class="chart-card full">
+    <h4>Trend Categorie</h4>
+    <canvas id="chart-trend" height="280"></canvas>
+  </div>
+  {% endif %}
+</div>
+
+<div id="panel-breakdown" class="tab-panel">
+  {% for m in sorted_months %}
+  {% set midx = loop.index0 %}
+  <div class="breakdown-card">
+    <h3>{{ month_labels[midx] }}</h3>
+    <div class="breakdown-grid">
+      <canvas id="donut-{{ midx }}"></canvas>
+      <table class="breakdown-table">
+        {% for attr, values, mean in rows %}
+        <tr class="{{ get_color_for_attribute(attr, values[midx]) }}">
+          <td>{{ attr }}</td>
+          <td class="r">{{ "%.1f"|format(values[midx]) }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script>
 var VARIABILI = ['spesa','pasti_fuori','svago','shopping','inaspettate','varie','salute','vacanze'];
 var FISSE = ['abbonamenti','investimenti','assicurazioni','condominio','luce','gas','mutuo','lenti','telefonia','parrucchiere','palestra'];
 var COMPUTED = ['uscite_variabili','uscite_fisse','uscite_totali','delta'];
+var TOP_ATTRS = ['spesa','pasti_fuori','svago','shopping','abbonamenti','luce','gas','telefonia'];
+
+var MONTH_LABELS = {{ month_labels|tojson }};
+var CHART_ROWS = [
+  {% for attr, values, mean in rows %}
+  {attr: "{{ attr }}", values: {{ values|tojson }}, mean: {{ mean }}},
+  {% endfor %}
+];
+var NUM_MONTHS = {{ sorted_months|length }};
+
+function getRow(attr) {
+  for (var i = 0; i < CHART_ROWS.length; i++) {
+    if (CHART_ROWS[i].attr === attr) return CHART_ROWS[i];
+  }
+  return null;
+}
+
+// ─── Charts ───
+
+function renderIncomeBar() {
+  var ctx = document.getElementById('chart-income');
+  if (!ctx) return;
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: MONTH_LABELS,
+      datasets: [
+        { label: 'Entrate', data: getRow('entrate').values, backgroundColor: '#0055cc' },
+        { label: 'Uscite totali', data: getRow('uscite_totali').values, backgroundColor: '#e74c3c' },
+        { label: 'Delta', data: getRow('delta').values, backgroundColor: getRow('delta').values.map(function(v) { return v >= 0 ? '#2ecc71' : '#e74c3c'; }) }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: 'bottom' } },
+      scales: { y: { beginAtZero: true } }
+    }
+  });
+}
+
+function renderStackedBar() {
+  var ctx = document.getElementById('chart-stacked');
+  if (!ctx) return;
+  var uv = getRow('uscite_variabili');
+  var uf = getRow('uscite_fisse');
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: MONTH_LABELS,
+      datasets: [
+        { label: 'Uscite variabili', data: uv ? uv.values : [], backgroundColor: '#f39c12' },
+        { label: 'Uscite fisse', data: uf ? uf.values : [], backgroundColor: '#3498db' }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: 'bottom' } },
+      scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
+    }
+  });
+}
+
+function renderTrendLine() {
+  var ctx = document.getElementById('chart-trend');
+  if (!ctx) return;
+  var datasets = [];
+  var colors = ['#e74c3c','#e67e22','#f1c40f','#2ecc71','#3498db','#9b59b6','#1abc9c','#e84393'];
+  TOP_ATTRS.forEach(function(attr, i) {
+    var row = getRow(attr);
+    if (row) {
+      datasets.push({
+        label: attr,
+        data: row.values,
+        borderColor: colors[i % colors.length],
+        backgroundColor: colors[i % colors.length] + '33',
+        fill: false,
+        tension: 0.3,
+        pointRadius: 4
+      });
+    }
+  });
+  new Chart(ctx, {
+    type: 'line',
+    data: { labels: MONTH_LABELS, datasets: datasets },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: 'bottom' } },
+      scales: { y: { beginAtZero: true } }
+    }
+  });
+}
+
+function renderDonuts() {
+  for (var m = 0; m < NUM_MONTHS; m++) {
+    var ctx = document.getElementById('donut-' + m);
+    if (!ctx) continue;
+    var labels = [];
+    var data = [];
+    var colors = [];
+    var palette = ['#e74c3c','#e67e22','#f1c40f','#2ecc71','#3498db','#9b59b6','#1abc9c','#e84393','#95a5a6','#34495e','#d35400','#27ae60'];
+    var ci = 0;
+    TOP_ATTRS.concat(COMPUTED.filter(function(a) { return a !== 'uscite_totali' && a !== 'delta'; })).forEach(function(attr) {
+      var row = getRow(attr);
+      if (row && row.values[m] > 0) {
+        labels.push(attr);
+        data.push(row.values[m]);
+        colors.push(palette[ci++ % palette.length]);
+      }
+    });
+    new Chart(ctx, {
+      type: 'doughnut',
+      data: { labels: labels, datasets: [{ data: data, backgroundColor: colors }] },
+      options: {
+        responsive: true,
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 10 } } } }
+      }
+    });
+  }
+}
+
+// ─── Tab switching ───
+
+function switchTab(name) {
+  document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
+  document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+  document.getElementById('panel-' + name).classList.add('active');
+  document.querySelector('.tab[onclick*="' + name + '"]').classList.add('active');
+}
+
+// ─── Existing table toggle logic ───
 
 var baseValues = {};
-var rows = {};
+var tableRows = {};
 var numMonths;
 
 function initCompare() {
-  numMonths = {{ sorted_months|length }};
+  numMonths = NUM_MONTHS;
   document.querySelectorAll('#compare-table tbody tr[data-attr]').forEach(function(row) {
     var attr = row.getAttribute('data-attr');
-    rows[attr] = row;
+    tableRows[attr] = row;
     var cells = row.querySelectorAll('td');
     var vals = [];
     for (var i = 0; i < numMonths; i++) {
@@ -77,13 +295,13 @@ function getColor(attr, value) {
 }
 
 function getCurrentValue(attr, monthIdx) {
-  var row = rows[attr];
+  var row = tableRows[attr];
   if (!row || row.classList.contains('disabled')) return 0;
   return baseValues[attr][monthIdx];
 }
 
 function setCellValue(attr, monthIdx, value) {
-  var row = rows[attr];
+  var row = tableRows[attr];
   if (!row) return;
   var cells = row.querySelectorAll('td');
   var cell = cells[monthIdx + 1];
@@ -92,7 +310,7 @@ function setCellValue(attr, monthIdx, value) {
 }
 
 function recalcMean(attr) {
-  var row = rows[attr];
+  var row = tableRows[attr];
   if (!row) return;
   var cells = row.querySelectorAll('td');
   var sum = 0;
@@ -132,7 +350,17 @@ function toggleAttr(btn) {
   recalc();
 }
 
-initCompare();
+// ─── Init ───
+
+document.addEventListener('DOMContentLoaded', function() {
+  initCompare();
+  renderIncomeBar();
+  renderStackedBar();
+  {% if sorted_months|length >= 3 %}
+  renderTrendLine();
+  {% endif %}
+  renderDonuts();
+});
 </script>
 {% endif %}
 {% endblock %}
