@@ -1,0 +1,112 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<details class="section-collapsible" open>
+  <summary>Tracciamento Attributi</summary>
+  <div class="tracking-section">
+  <div class="tracking-header">
+    <label>Attributi:
+      <select id="track-select" multiple size="6">
+        {% for attr in SQL_ATTRIBUTES_EDITABLE %}
+        <option value="{{ attr }}">{{ attr }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <p class="tracking-hint">Ctrl+click per selezionare più attributi</p>
+  </div>
+  {% if all_month_labels %}
+  <div id="tracking-content" class="tracking-content" style="display:none">
+    <div class="chart-card">
+      <canvas id="chart-tracking" height="300"></canvas>
+    </div>
+    <div class="tracking-table-wrapper">
+      <table class="track-table">
+        <thead><tr id="track-table-head"><th>Mese</th><th>Seleziona uno o più attributi</th></tr></thead>
+        <tbody id="track-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+  {% else %}
+  <p class="empty-state">Nessun dato disponibile.</p>
+  {% endif %}
+</div>
+</details>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+var TRACK_DATA = {{ tracking_data|tojson }};
+var TRACK_MONTHS = {{ all_month_labels|tojson }};
+var TRACK_PALETTE = ['#2563eb','#dc2626','#059669','#d97706','#7c3aed','#0891b2','#db2777','#65a30d','#0d9488','#9333ea'];
+var trackingChart = null;
+
+function updateTracking() {
+  var select = document.getElementById('track-select');
+  var selected = [];
+  for (var i = 0; i < select.options.length; i++) {
+    if (select.options[i].selected) selected.push(select.options[i].value);
+  }
+
+  var content = document.getElementById('tracking-content');
+  if (!selected.length) {
+    if (content) content.style.display = 'none';
+    return;
+  }
+  if (content) content.style.display = '';
+
+  var ctx = document.getElementById('chart-tracking');
+  if (!ctx) return;
+  if (trackingChart) trackingChart.destroy();
+
+  var datasets = [];
+  selected.forEach(function(attr, i) {
+    var values = TRACK_DATA[attr];
+    var color = TRACK_PALETTE[i % TRACK_PALETTE.length];
+    datasets.push({
+      label: attr,
+      data: values,
+      borderColor: color,
+      backgroundColor: color + '1a',
+      fill: false,
+      tension: 0.3,
+      pointRadius: 3
+    });
+  });
+
+  trackingChart = new Chart(ctx, {
+    type: 'line',
+    data: { labels: TRACK_MONTHS, datasets: datasets },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: 'bottom' } },
+      scales: { y: { beginAtZero: false } }
+    }
+  });
+
+  var thead = document.getElementById('track-table-head');
+  var tbody = document.getElementById('track-table-body');
+  if (!thead || !tbody) return;
+  thead.innerHTML = '<th>Mese</th>' + selected.map(function(a) {
+    return '<th>' + a + '</th>';
+  }).join('');
+  tbody.innerHTML = '';
+  for (var m = 0; m < TRACK_MONTHS.length; m++) {
+    var tr = document.createElement('tr');
+    var tdMonth = document.createElement('td');
+    tdMonth.textContent = TRACK_MONTHS[m];
+    tdMonth.style.fontWeight = '600';
+    tr.appendChild(tdMonth);
+    selected.forEach(function(attr) {
+      var td = document.createElement('td');
+      var v = TRACK_DATA[attr][m];
+      td.textContent = v !== null ? v.toFixed(2) : '-';
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  document.getElementById('track-select').addEventListener('change', updateTracking);
+});
+</script>
+{% endblock %}

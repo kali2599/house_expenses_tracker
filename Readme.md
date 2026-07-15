@@ -1,54 +1,46 @@
 # House Expenses Tracker
 
 ## Description
-The House Expenses Tracker is a Python-based application designed to help you manage and track your household expenses efficiently. It uses SQLite as the database to store expense data.
+Web application per tracciare spese domestiche. Interfaccia Flask + SQLite, UI in italiano.
 
 ## Features
-- Add, update, and delete expenses.
-- View expense summaries.
-- Lightweight and easy to use.
+- **Add Expense** — Inserimento multiplo spese con attributo, importo, nota. Tabella riepilogativa mensile.
+- **Data Analysis / Tracciamento** — Seleziona uno o più attributi, visualizza andamento su linea chart + tabella dati.
+- **Data Analysis / Confronto** — Griglia mesi multi-selezione, statistiche riassuntive (entrate/uscite/delta), 4 tab: Tabella, Grafici (barre raggruppate/stacked/trend/donut), Analisi per mese, Variazione %.
+- **Undo Expense** — Annulla l'ultima spesa inserita in un mese.
+- **Show History** — Storico completo con filtri data, toggle visibilità colonne.
+- **Change Year** — Cambia anno di lavoro.
 
-## Prerequisites
-- Python 3.6 or higher
+## Requisiti
+- Python 3.6+
 - SQLite3
+- Flask (unica dipendenza esterna)
 
 ## Setup
-1. Clone the repository:
-   ```bash
-   git clone <repository-url>
-   ```
-2. Navigate to the project directory:
-   ```bash
-   cd house_expenses_tracker
-   ```
-3. Initialize the database:
-   ```bash
-   sqlite3 data.db < init.sql
-   ```
-4. Populate the database:
-      ```bash
-   sqlite3 data.db < populate.sql
-   ```
-   (NOTE: populate.sql script has fake data. Change it with your real data.)
-5. Install required Python packages (if any):
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-## Usage
-Run the application:
 ```bash
-python main.py 
+git clone <repository-url>
+cd house_expenses_tracker
+pip install -r requirements.txt
+echo "/path/to/your/database.db" > database_path
+sqlite3 /path/to/your/database.db < init.sql
+python main.py
 ```
 
-## File Structure
-- `main.py`: Entry point of the application.
-- `settings.py`: Configuration settings for the application.
-- `sqlManager.py`: Handles database operations.
-- `utils.py`: Utility functions used across the application.
-- `init.sql`: SQL script to initialize the database schema.
-- `populate.sql`: SQL script to populate the database schema.
+Apri il browser su `http://localhost:5000`.
 
+**Nota:** `populate.sql` non è allineato allo schema corrente. Usalo solo come riferimento o inserisci dati manualmente dall'interfaccia Add Expense.
 
-## Contributing
-Contributions are welcome! Feel free to open issues or submit pull requests.
+## Struttura
+| File | Ruolo |
+|---|---|
+| `main.py` | Flask app — routes, request handling |
+| `sqlManager.py` | Accesso dati SQLite |
+| `utils.py` | Helper: formattazione date, colori |
+| `settings.py` | Costanti: PORT, mesi, attributi |
+| `templates/` | Jinja2 HTML templates |
+| `static/style.css` | CSS |
+| `init.sql` | Schema database |
+| `database_path` | Path al file .db (gitignored) |
+
+## Porta
+In `settings.py`: `PORT = 5000` (development senza sudo). Cambia a `443` per produzione.

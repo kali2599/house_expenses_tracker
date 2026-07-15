@@ -10,7 +10,13 @@
 <div id="nav">
   <span class="nav-title">House Expenses Tracker</span>
   <a href="/add-expense">Add Expense</a>
-  <a href="/compare-months">Data Analysis</a>
+  <div class="nav-dropdown">
+    <span class="nav-dropdown-trigger">Data Analysis ▾</span>
+    <div class="nav-dropdown-content">
+      <a href="/data-analysis/tracking" class="{% if active_view|default('') == 'tracking' %}nav-active{% endif %}">Tracciamento</a>
+      <a href="/data-analysis/comparison" class="{% if active_view|default('') == 'comparison' %}nav-active{% endif %}">Confronto</a>
+    </div>
+  </div>
   <a href="/undo-expense">Undo Expense</a>
   <a href="/show-history">Show History</a>
   <span class="nav-year">
@@ -24,5 +30,18 @@
 {% endfor %}
 {% block content %}{% endblock %}
 </div>
+<script>
+function toggleDropdown(e) {
+  e.stopPropagation();
+  document.querySelector('.nav-dropdown').classList.toggle('open');
+}
+document.addEventListener('click', function() {
+  document.querySelector('.nav-dropdown').classList.remove('open');
+});
+document.addEventListener('DOMContentLoaded', function() {
+  var trigger = document.querySelector('.nav-dropdown-trigger');
+  if (trigger) trigger.addEventListener('click', toggleDropdown);
+});
+</script>
 </body>
 </html>

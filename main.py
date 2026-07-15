@@ -119,10 +119,10 @@ def add_expense():
         current_year=year)
 
 
-# ---- Data Analysis ----
+# ---- Data Analysis / Comparison ----
 
-@app.route('/compare-months', methods=['GET', 'POST'])
-def compare_months():
+@app.route('/data-analysis/comparison', methods=['GET', 'POST'])
+def data_analysis_comparison():
     sm = get_db()
     year = session.get('year')
     all_sorted = sm.get_months_list(year)
@@ -133,7 +133,12 @@ def compare_months():
             flash("Seleziona almeno un mese.", "error")
             selected = all_sorted[-3:] if len(all_sorted) >= 3 else all_sorted[:]
     else:
-        selected = all_sorted[-3:] if len(all_sorted) >= 3 else all_sorted[:]
+        from datetime import datetime
+        current_month_key = f"{year}_{MONTHS_INDEX[datetime.now().month]}"
+        if current_month_key in all_sorted:
+            selected = [current_month_key]
+        else:
+            selected = all_sorted[-1:] if all_sorted else []
 
     months_data = sm.get_months_data(selected)
     sorted_months = [m for m in all_sorted if m in selected]
@@ -162,6 +167,21 @@ def compare_months():
         month_labels.append(f"{mn.capitalize()} {y}")
         month_short_labels.append(mn[:3].capitalize())
 
+    return render_template('comparison.html', months=all_sorted,
+        selected=selected, sorted_months=sorted_months,
+        rows=rows, month_labels=month_labels,
+        month_short_labels=month_short_labels,
+        active_view='comparison', current_year=year)
+
+
+# ---- Data Analysis / Tracking ----
+
+@app.route('/data-analysis/tracking')
+def data_analysis_tracking():
+    sm = get_db()
+    year = session.get('year')
+    all_sorted = sm.get_months_list(year)
+
     all_months_data = sm.get_months_data(all_sorted)
     tracking_data = {}
     for attr in SQL_ATTRIBUTES_EDITABLE:
@@ -180,19 +200,20 @@ def compare_months():
         y, mn = m.split('_')
         all_month_labels.append(f"{mn.capitalize()} {y}")
 
-    return render_template('compare_months.html', months=all_sorted,
-        selected=selected, sorted_months=sorted_months,
-        rows=rows, month_labels=month_labels,
-        month_short_labels=month_short_labels,
+    return render_template('tracking.html',
         tracking_data=tracking_data, all_month_labels=all_month_labels,
-        current_year=year)
+        months=all_sorted, active_view='tracking', current_year=year)
 
 
-# ---- Track Attribute (redirect to Data Analysis) ----
+# ---- Redirects ----
+
+@app.route('/compare-months', methods=['GET', 'POST'])
+def compare_months_redirect():
+    return redirect(url_for('data_analysis_comparison'))
 
 @app.route('/track-attribute', methods=['GET', 'POST'])
 def track_attribute_redirect():
-    return redirect(url_for('compare_months'))
+    return redirect(url_for('data_analysis_tracking'))
 
 
 # ---- Undo Expense ----

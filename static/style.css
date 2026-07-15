@@ -11,6 +11,14 @@ body {
 .nav-title { font-weight: 700; color: #fff; margin-right: 18px; font-size: 1.05em; letter-spacing: 0.3px; }
 .nav-year { margin-left: auto; color: #64748b; font-size: 0.88em; }
 .small-link { color: #60a5fa; font-size: 0.88em; }
+.nav-dropdown { position: relative; display: inline-block; }
+.nav-dropdown-trigger { color: #94a3b8; cursor: pointer; font-size: 0.92em; transition: color 0.15s; user-select: none; }
+.nav-dropdown-trigger:hover { color: #fff; }
+.nav-dropdown-content { display: none; position: absolute; top: 100%; left: 0; background: #1e293b; min-width: 170px; z-index: 100; border-radius: 0 0 8px 8px; overflow: hidden; box-shadow: 0 6px 20px rgba(0,0,0,0.25); }
+.nav-dropdown:hover .nav-dropdown-content, .nav-dropdown.open .nav-dropdown-content { display: block; }
+.nav-dropdown-content a { display: block; padding: 10px 16px; color: #94a3b8; text-decoration: none; font-size: 0.88em; transition: background 0.12s, color 0.12s; }
+.nav-dropdown-content a:hover { background: #334155; color: #fff; }
+.nav-dropdown-content a.nav-active { color: #fff; font-weight: 600; }
 #content { max-width: 1050px; margin: 28px auto; padding: 0 20px; }
 .flash { padding: 12px 16px; margin: 0 0 16px; border-radius: 6px; font-size: 0.92em; animation: fadeIn 0.25s ease; }
 .flash.success { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
