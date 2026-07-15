@@ -1,7 +1,7 @@
 -- Create registro_spese table
 CREATE TABLE registro_spese (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    data TEXT DEFAULT CURRENT_TIMESTAMP,
+    timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
     categoria TEXT,
     nota TEXT,
     importo REAL

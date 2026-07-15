@@ -81,7 +81,8 @@ def add_expense():
             attribute = request.form.get('attribute')
             value = round(float(request.form.get('value', 0)), 1)
             nota = request.form.get('nota', '').strip() or 'N/A'
-            sm.insert_expense_in_registry(attribute, nota, value)
+            mese_data = f"{month_num:02d}-{month.split('_')[0]}"
+            sm.insert_expense_in_registry(attribute, nota, value, mese_data)
             old_val = sm.get_value_by_attrANDmonth(month, attribute)
             sm.update_value_by_attrANDmonth(month, attribute, old_val + value)
             sm.commit()
@@ -99,7 +100,8 @@ def add_expense():
             for attr, val_raw, nota_raw in zip(attributes, values, notes):
                 val = round(float(val_raw), 1)
                 nota = nota_raw.strip() or 'N/A'
-                sm.insert_expense_in_registry(attr, nota, val)
+                mese_data = f"{month_num:02d}-{month.split('_')[0]}"
+                sm.insert_expense_in_registry(attr, nota, val, mese_data)
                 old_val = sm.get_value_by_attrANDmonth(month, attr)
                 sm.update_value_by_attrANDmonth(month, attr, old_val + val)
                 inserted.append((attr, val, nota))
@@ -180,32 +182,52 @@ def undo_expense():
     sm = get_db()
     year = session.get('year')
 
+    month_num = None
+    month = None
+
     if request.method == 'POST':
         month_raw = request.form.get('month')
         action = request.form.get('action', '')
 
-        if month_raw and month_raw.isdigit():
-            month_num = int(month_raw)
-            month = f"{year}_{MONTHS_INDEX[month_num]}"
+        if month_raw:
+            if '_' in month_raw:
+                month = month_raw
+                month_name = month.split('_')[1]
+                month_num = int(request.form.get('month_num', 0))
+            elif month_raw.isdigit():
+                month_num = int(month_raw)
+                month_name = MONTHS_INDEX[month_num]
+                month = f"{year}_{month_name}"
 
         if action == 'show':
-            last = sm.get_last_expense()
+            if not month_num:
+                flash("Select a month.", "error")
+                return render_template('undo_expense.html',
+                    last_expense=None, current_year=year)
+            last = sm.get_last_expense_for_month(month)
             if not last:
-                flash("No expenses to undo.", "error")
+                flash("No expenses to undo for this month.", "error")
                 return render_template('undo_expense.html',
                     last_expense=None, current_year=year)
             return render_template('undo_expense.html',
-                last_expense=last, month=month, current_year=year)
+                last_expense=last, month=month, month_num=month_num,
+                current_year=year)
 
         if action == 'undo':
-            last = sm.get_last_expense()
+            if not month:
+                flash("Invalid month.", "error")
+                return render_template('undo_expense.html',
+                    last_expense=None, current_year=year)
+            last = sm.get_last_expense_for_month(month)
             if last:
-                expense_id, data, category, nota, amount = last
+                expense_id, ts, category, nota, amount, mese_data = last
                 sm.cursor.execute("DELETE FROM registro_spese WHERE id = ?", (expense_id,))
                 cur_val = sm.get_value_by_attrANDmonth(month, category)
                 sm.update_value_by_attrANDmonth(month, category, cur_val - amount)
                 sm.commit()
                 flash("Expense undone successfully!", "success")
+            else:
+                flash("No expenses to undo for this month.", "error")
             return render_template('undo_expense.html',
                 done=True, current_year=year)
 

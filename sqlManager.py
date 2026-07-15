@@ -28,8 +28,8 @@ class SQLManager:
         self.cursor.execute(f"UPDATE spese_mensili SET {attribute} = ? WHERE mese = ?", (new_value, month))
 
 
-    def insert_expense_in_registry(self, category, nota, amount):
-        self.cursor.execute("INSERT INTO registro_spese (categoria, nota, importo) VALUES (?, ?, ?)", (category, nota, amount))
+    def insert_expense_in_registry(self, category, nota, amount, mese_data=None):
+        self.cursor.execute("INSERT INTO registro_spese (categoria, nota, importo, data) VALUES (?, ?, ?, ?)", (category, nota, amount, mese_data))
 
 
     def check_month_exists(self, month) -> bool:
@@ -93,32 +93,43 @@ class SQLManager:
     
     def get_registro_entries(self, start_date=None, end_date=None):
         """Get entries from registro_spese filtered by optional date range (YYYY-MM-DD)"""
-        query = "SELECT id, data, categoria, nota, importo FROM registro_spese"
+        query = "SELECT id, timestamp, categoria, nota, importo, data FROM registro_spese"
         params = []
         conditions = []
         if start_date:
-            conditions.append("date(data) >= ?")
+            conditions.append("date(timestamp) >= ?")
             params.append(start_date)
         if end_date:
-            conditions.append("date(data) <= ?")
+            conditions.append("date(timestamp) <= ?")
             params.append(end_date)
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
-        query += " ORDER BY data"
+        query += " ORDER BY timestamp"
         return self.cursor.execute(query, params).fetchall()
 
 
     def get_last_expense(self):
         """Get the last expense inserted"""
-        data = self.cursor.execute("SELECT id, data, categoria, nota, importo FROM registro_spese ORDER BY id DESC LIMIT 1").fetchone()
+        data = self.cursor.execute("SELECT id, timestamp, categoria, nota, importo, data FROM registro_spese ORDER BY id DESC LIMIT 1").fetchone()
         return data
+
+    def get_last_expense_for_month(self, month_key):
+        """Get the last expense for a specific month (month_key = YYYY_MESE)"""
+        year, month_name = month_key.split('_')
+        month_num = self._get_month_number(month_name)
+        mese_data = f"{month_num:02d}-{year}"
+        return self.cursor.execute(
+            "SELECT id, timestamp, categoria, nota, importo, data "
+            "FROM registro_spese WHERE data = ? ORDER BY id DESC LIMIT 1",
+            (mese_data,)
+        ).fetchone()
 
 
     def delete_last_expense(self):
         """Delete the last expense and return its details"""
         last_expense = self.get_last_expense()
         if last_expense:
-            expense_id, expense_data, category, nota, amount = last_expense
+            expense_id, expense_ts, category, nota, amount, expense_data = last_expense
             self.cursor.execute("DELETE FROM registro_spese WHERE id = ?", (expense_id,))
             return last_expense
         return None
@@ -128,7 +139,7 @@ class SQLManager:
         """Undo the last expense: remove it from registry and subtract from monthly total"""
         last_expense = self.get_last_expense()
         if last_expense:
-            expense_id, expense_data, category, nota, amount = last_expense
+            expense_id, expense_ts, category, nota, amount, expense_data = last_expense
             self.cursor.execute("DELETE FROM registro_spese WHERE id = ?", (expense_id,))
             current_value = self.get_value_by_attrANDmonth(month, category)
             new_value = current_value - amount

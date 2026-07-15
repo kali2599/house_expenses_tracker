@@ -97,3 +97,8 @@ label { display: inline-block; margin: 5px 0; }
   padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 0.75em;
 }
 .toggle-btn:hover { border-color: #999; color: #333; }
+
+.col-hidden { display: none; }
+.col-toggles { margin-bottom: 10px; display: flex; gap: 10px; flex-wrap: wrap; }
+.col-toggles label { font-size: 0.85em; cursor: pointer; display: inline-flex; align-items: center; gap: 3px; }
+.col-toggles input { margin: 0; }

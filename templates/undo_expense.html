@@ -16,16 +16,18 @@
 
 {% if last_expense and not done %}
 <div class="card">
-  <h3>Last expense to undo</h3>
+  <h3>Last expense to undo for this month</h3>
   <table class="undo-table">
     <tr><td>ID</td><td>{{ last_expense[0] }}</td></tr>
-    <tr><td>Date</td><td>{{ last_expense[1] }}</td></tr>
+    <tr><td>Timestamp</td><td>{{ last_expense[1] }}</td></tr>
+    <tr><td>Mese</td><td>{{ last_expense[5] }}</td></tr>
     <tr><td>Category</td><td>{{ last_expense[2] }}</td></tr>
     <tr><td>Note</td><td>{{ last_expense[3] }}</td></tr>
     <tr><td>Amount</td><td>{{ "%.2f"|format(last_expense[4]) }}</td></tr>
   </table>
   <form method="post">
     <input type="hidden" name="month" value="{{ month }}">
+    <input type="hidden" name="month_num" value="{{ month_num }}">
     <input type="hidden" name="action" value="undo">
     <button type="submit" class="danger">Confirm undo</button>
     <a href="/undo-expense" class="button">Cancel</a>

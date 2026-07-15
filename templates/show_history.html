@@ -13,20 +13,29 @@
 {% if entries is defined %}
 <div class="card">
   {% if entries %}
+  <div class="col-toggles">
+    <label><input type="checkbox" checked data-col="id" onchange="toggleCol(this)"> ID</label>
+    <label><input type="checkbox" data-col="timestamp" onchange="toggleCol(this)"> Timestamp</label>
+    <label><input type="checkbox" checked data-col="mese" onchange="toggleCol(this)"> Mese</label>
+    <label><input type="checkbox" checked data-col="category" onchange="toggleCol(this)"> Category</label>
+    <label><input type="checkbox" checked data-col="note" onchange="toggleCol(this)"> Note</label>
+    <label><input type="checkbox" checked data-col="amount" onchange="toggleCol(this)"> Amount</label>
+  </div>
   <table class="history-table">
     <tr>
-      <th>ID</th>
-      <th>Date</th>
-      <th>Category</th>
-      <th>Note</th>
-      <th>Amount</th>
+      <th data-col="id">ID</th>
+      <th data-col="timestamp">Timestamp</th>
+      <th data-col="mese">Mese</th>
+      <th data-col="category">Category</th>
+      <th data-col="note">Note</th>
+      <th data-col="amount">Amount</th>
     </tr>
     {% set ns = namespace(prev_month=None) %}
     {% for entry in entries %}
     {% set cur_month = entry[1][:7] %}
     {% if cur_month != ns.prev_month %}
     <tr class="month-header">
-      <td colspan="5">
+      <td colspan="6">
         {% set month_num = entry[1][5:7] | int %}
         {{ entry[1][:4] }} {{ MONTHS_INDEX[month_num] }} ({{ month_counts[cur_month] }})
       </td>
@@ -34,11 +43,12 @@
     {% set ns.prev_month = cur_month %}
     {% endif %}
     <tr>
-      <td>{{ entry[0] }}</td>
-      <td>{{ entry[1] }}</td>
-      <td>{{ entry[2] }}</td>
-      <td>{{ entry[3] }}</td>
-      <td>{{ "%.2f"|format(entry[4]) }}</td>
+      <td data-col="id">{{ entry[0] }}</td>
+      <td data-col="timestamp">{{ entry[1] }}</td>
+      <td data-col="mese">{{ entry[5] }}</td>
+      <td data-col="category">{{ entry[2] }}</td>
+      <td data-col="note">{{ entry[3] }}</td>
+      <td data-col="amount">{{ "%.2f"|format(entry[4]) }}</td>
     </tr>
     {% endfor %}
   </table>
@@ -46,5 +56,19 @@
   <p>No entries found.</p>
   {% endif %}
 </div>
+
+<script>
+function toggleCol(cb) {
+  var col = cb.getAttribute('data-col');
+  var hidden = !cb.checked;
+  document.querySelectorAll('[data-col="' + col + '"]').forEach(function(el) {
+    el.classList.toggle('col-hidden', hidden);
+  });
+}
+document.addEventListener('DOMContentLoaded', function() {
+  var ts = document.querySelector('[data-col="timestamp"]');
+  if (ts && ts.tagName === 'INPUT') toggleCol(ts);
+});
+</script>
 {% endif %}
 {% endblock %}
