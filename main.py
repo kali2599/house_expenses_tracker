@@ -162,30 +162,37 @@ def compare_months():
         month_labels.append(f"{mn.capitalize()} {y}")
         month_short_labels.append(mn[:3].capitalize())
 
+    all_months_data = sm.get_months_data(all_sorted)
+    tracking_data = {}
+    for attr in SQL_ATTRIBUTES_EDITABLE:
+        attr_idx = SQL_ATTRIBUTES_ALL.index(attr)
+        values = []
+        for m in all_sorted:
+            row = all_months_data.get(m)
+            if row and row[attr_idx] is not None:
+                values.append(round(float(row[attr_idx]), 2))
+            else:
+                values.append(None)
+        tracking_data[attr] = values
+
+    all_month_labels = []
+    for m in all_sorted:
+        y, mn = m.split('_')
+        all_month_labels.append(f"{mn.capitalize()} {y}")
+
     return render_template('compare_months.html', months=all_sorted,
         selected=selected, sorted_months=sorted_months,
         rows=rows, month_labels=month_labels,
         month_short_labels=month_short_labels,
+        tracking_data=tracking_data, all_month_labels=all_month_labels,
         current_year=year)
 
 
-# ---- Track Attribute ----
+# ---- Track Attribute (redirect to Data Analysis) ----
 
 @app.route('/track-attribute', methods=['GET', 'POST'])
-def track_attribute():
-    sm = get_db()
-    year = session.get('year')
-    months = sm.get_months_list(year)
-
-    selected_attr = None
-    month_values = None
-    if request.method == 'POST':
-        selected_attr = request.form.get('attribute')
-        month_values = sm.get_attribute_through_months(selected_attr, months)
-
-    return render_template('track_attribute.html',
-        selected_attr=selected_attr, month_values=month_values,
-        current_year=year)
+def track_attribute_redirect():
+    return redirect(url_for('compare_months'))
 
 
 # ---- Undo Expense ----

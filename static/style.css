@@ -117,7 +117,7 @@ label { display: inline-block; margin: 4px 0; }
 @keyframes scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
 
 /* ─── Month selector grid ─── */
-.selector-form { background: #fff; border-radius: 12px; padding: 20px 24px; box-shadow: 0 1px 6px rgba(0,0,0,0.06); margin-bottom: 24px; }
+.selector-form { padding: 20px 24px; }
 .selector-form label { display: block; margin-bottom: 12px; font-size: 0.88em; color: #64748b; font-weight: 500; }
 .month-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
 .month-card {
@@ -244,3 +244,40 @@ label { display: inline-block; margin: 4px 0; }
 .pct-cell { font-weight: 700; font-size: 0.92em; }
 .pct-positive { color: #059669; }
 .pct-negative { color: #dc2626; }
+
+/* ─── Collapsible sections ─── */
+.section-collapsible {
+  background: #fff; border-radius: 12px;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.06);
+  margin-bottom: 24px; overflow: hidden;
+}
+.section-collapsible summary {
+  padding: 16px 24px; cursor: pointer; user-select: none;
+  font-size: 1.1em; font-weight: 700; color: #1e293b;
+  display: flex; align-items: center; justify-content: space-between;
+  list-style: none;
+}
+.section-collapsible summary::-webkit-details-marker { display: none; }
+.section-collapsible summary::marker { display: none; }
+.section-collapsible summary::after {
+  content: '▾'; font-size: 0.8em; color: #94a3b8;
+  transition: transform 0.2s;
+}
+.section-collapsible[open] summary::after { transform: rotate(180deg); }
+.section-collapsible summary:hover { background: #f8fafc; }
+
+/* ─── Tracking ─── */
+.tracking-section { padding: 0 24px 20px; }
+.tracking-header { margin-bottom: 16px; display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.tracking-header label { font-size: 0.92em; font-weight: 500; color: #475569; }
+.tracking-header select { min-width: 220px; min-height: 130px; margin-left: 8px; }
+.tracking-hint { font-size: 0.78em; color: #94a3b8; margin: 4px 0 0 8px; }
+.tracking-content { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; align-items: start; }
+.tracking-table-wrapper { max-height: 420px; overflow-y: auto; border-radius: 8px; border: 1px solid #e2e8f0; }
+.track-table { width: 100%; font-size: 0.85em; border-collapse: collapse; }
+.track-table th {
+  background: #f8fafc; font-weight: 600; color: #475569; padding: 8px 10px;
+  border-bottom: 2px solid #e2e8f0; position: sticky; top: 0; white-space: nowrap;
+}
+.track-table td { padding: 6px 10px; border-bottom: 1px solid #f1f5f9; white-space: nowrap; }
+.track-table tbody tr:hover { background: #f8fafc; }
