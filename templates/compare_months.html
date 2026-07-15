@@ -1,22 +1,27 @@
 {% extends "layout.html" %}
 {% block content %}
-<h2>Compare Months</h2>
+<h2>Confronta Mesi</h2>
 
-<form method="post">
-  <p>Select months to compare:</p>
-  {% for m in months %}
-  <label>
-    <input type="checkbox" name="selected_months" value="{{ m }}"
-      {% if m in selected %}checked{% endif %}> {{ m }}
-  </label><br>
-  {% endfor %}
-  <button type="submit">Compare</button>
+<form method="post" id="compare-form" class="selector-form">
+  <div class="month-grid">
+    {% for m in months %}
+    {% set parts = m.split('_') %}
+    {% set short = parts[1][:3]|capitalize %}
+    <div class="month-card{% if m in selected %} selected{% endif %}" onclick="toggleMonth(this)">
+      <input type="checkbox" name="selected_months" value="{{ m }}" {% if m in selected %}checked{% endif %} hidden>
+      <span class="month-card-label">{{ short }}</span>
+      <span class="month-card-year">{{ parts[0] }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  <button type="submit" class="compare-btn">Confronta</button>
 </form>
 
-{% if rows %}
+{% if rows and sorted_months %}
+<div class="results-section">
 <div class="summary-grid">
   {% set ns = namespace(tot_entrate=0, tot_uscite=0, tot_delta=0, best_delta=-999999, worst_delta=999999, best_month='', worst_month='') %}
-  {% for attr, values, mean in rows %}
+  {% for attr, values, mean, pct in rows %}
     {% if attr == 'entrate' %}
       {% set ns.tot_entrate = values | sum %}
     {% elif attr == 'uscite_totali' %}
@@ -58,6 +63,7 @@
   <button class="tab active" onclick="switchTab('table')">Tabella</button>
   <button class="tab" onclick="switchTab('charts')">Grafici</button>
   <button class="tab" onclick="switchTab('breakdown')">Analisi</button>
+  <button class="tab" onclick="switchTab('change')">Variazione %</button>
 </div>
 
 <div id="panel-table" class="tab-panel active">
@@ -74,7 +80,7 @@
         </tr>
       </thead>
       <tbody>
-      {% for attr, values, mean in rows %}
+      {% for attr, values, mean, pct in rows %}
       <tr data-attr="{{ attr }}">
         <td class="{{ get_color_for_attribute(attr) }}">{{ attr }}</td>
         {% for v in values %}
@@ -104,7 +110,7 @@
       <canvas id="chart-stacked"></canvas>
     </div>
   </div>
-  {% if sorted_months|length >= 3 %}
+  {% if sorted_months|length >= 2 %}
   <div class="chart-card full">
     <h4>Trend Categorie</h4>
     <canvas id="chart-trend" height="280"></canvas>
@@ -120,7 +126,7 @@
     <div class="breakdown-grid">
       <canvas id="donut-{{ midx }}"></canvas>
       <table class="breakdown-table">
-        {% for attr, values, mean in rows %}
+        {% for attr, values, mean, pct in rows %}
         <tr class="{{ get_color_for_attribute(attr, values[midx]) }}">
           <td>{{ attr }}</td>
           <td class="r">{{ "%.1f"|format(values[midx]) }}</td>
@@ -132,6 +138,43 @@
   {% endfor %}
 </div>
 
+<div id="panel-change" class="tab-panel">
+  <div class="card">
+    <table class="change-table">
+      <thead>
+        <tr>
+          <th>Attributo</th>
+          <th>Trend</th>
+          {% for m in sorted_months %}
+          <th>{{ month_short_labels[loop.index0] }}</th>
+          {% endfor %}
+          <th>Δ%</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for attr, values, mean, pct in rows %}
+        <tr>
+          <td class="{{ get_color_for_attribute(attr) }}">{{ attr }}</td>
+          <td class="trend-cell">
+            {%- if pct is not none and pct > 1 %}↗
+            {%- elif pct is not none and pct < -1 %}↘
+            {%- else %}→
+            {%- endif -%}
+          </td>
+          {% for v in values %}
+          <td>{{ "%.1f"|format(v) }}</td>
+          {% endfor %}
+          <td class="pct-cell{% if pct is not none and pct >= 0 %} pct-positive{% elif pct is not none and pct < 0 %} pct-negative{% endif %}">
+            {%- if pct is not none %}{{ "%+.1f"|format(pct) }}%{% else %}N/A{% endif -%}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script>
 var VARIABILI = ['spesa','pasti_fuori','svago','shopping','inaspettate','varie','salute','vacanze'];
@@ -141,8 +184,8 @@ var TOP_ATTRS = ['spesa','pasti_fuori','svago','shopping','abbonamenti','luce','
 
 var MONTH_LABELS = {{ month_labels|tojson }};
 var CHART_ROWS = [
-  {% for attr, values, mean in rows %}
-  {attr: "{{ attr }}", values: {{ values|tojson }}, mean: {{ mean }}},
+  {% for attr, values, mean, pct in rows %}
+  {attr: "{{ attr }}", values: {{ values|tojson }}, mean: {{ mean }}, pct: {{ pct if pct is not none else 'null' }}},
   {% endfor %}
 ];
 var NUM_MONTHS = {{ sorted_months|length }};
@@ -166,7 +209,7 @@ function renderIncomeBar() {
       datasets: [
         { label: 'Entrate', data: getRow('entrate').values, backgroundColor: '#0055cc' },
         { label: 'Uscite totali', data: getRow('uscite_totali').values, backgroundColor: '#e74c3c' },
-        { label: 'Delta', data: getRow('delta').values, backgroundColor: getRow('delta').values.map(function(v) { return v >= 0 ? '#2ecc71' : '#e74c3c'; }) }
+        { label: 'Delta', data: getRow('delta').values, backgroundColor: getRow('delta').values.map(function(v) { return v >= 0 ? '#2ecc71' : '#8b5cf6'; }) }
       ]
     },
     options: {
@@ -266,6 +309,14 @@ function switchTab(name) {
   document.querySelector('.tab[onclick*="' + name + '"]').classList.add('active');
 }
 
+// ─── Month selector ───
+
+function toggleMonth(el) {
+  el.classList.toggle('selected');
+  var cb = el.querySelector('input[type="checkbox"]');
+  if (cb) cb.checked = !cb.checked;
+}
+
 // ─── Existing table toggle logic ───
 
 var baseValues = {};
@@ -356,7 +407,7 @@ document.addEventListener('DOMContentLoaded', function() {
   initCompare();
   renderIncomeBar();
   renderStackedBar();
-  {% if sorted_months|length >= 3 %}
+  {% if sorted_months|length >= 2 %}
   renderTrendLine();
   {% endif %}
   renderDonuts();

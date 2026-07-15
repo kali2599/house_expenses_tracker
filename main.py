@@ -119,45 +119,54 @@ def add_expense():
         current_year=year)
 
 
-# ---- Compare Months ----
+# ---- Data Analysis ----
 
 @app.route('/compare-months', methods=['GET', 'POST'])
 def compare_months():
     sm = get_db()
     year = session.get('year')
-    months = sm.get_months_list(year)
+    all_sorted = sm.get_months_list(year)
 
     if request.method == 'POST':
         selected = request.form.getlist('selected_months')
         if not selected:
-            flash("Select at least one month.", "error")
-        else:
-            months_data = sm.get_months_data(selected)
-            all_sorted = sm.get_months_list(year)
-            sorted_months = [m for m in all_sorted if m in selected]
-            rows = []
-            for attr_idx, attr in enumerate(SQL_ATTRIBUTES_ALL):
-                if attr == 'mese':
-                    continue
-                values = []
-                for m in sorted_months:
-                    row = months_data.get(m)
-                    if row and row[attr_idx] is not None:
-                        v = round(float(row[attr_idx]), 2)
-                        values.append(v)
-                if values:
-                    mean = round(sum(values) / len(values), 2)
-                    rows.append((attr, values, mean))
-            month_labels = []
-            for m in sorted_months:
-                y, mn = m.split('_')
-                month_labels.append(f"{mn.capitalize()} {y}")
-            return render_template('compare_months.html', months=months,
-                selected=selected, sorted_months=sorted_months,
-                rows=rows, month_labels=month_labels, current_year=year)
+            flash("Seleziona almeno un mese.", "error")
+            selected = all_sorted[-3:] if len(all_sorted) >= 3 else all_sorted[:]
+    else:
+        selected = all_sorted[-3:] if len(all_sorted) >= 3 else all_sorted[:]
 
-    return render_template('compare_months.html', months=months,
-        selected=[], rows=None, current_year=year)
+    months_data = sm.get_months_data(selected)
+    sorted_months = [m for m in all_sorted if m in selected]
+
+    rows = []
+    for attr_idx, attr in enumerate(SQL_ATTRIBUTES_ALL):
+        if attr == 'mese':
+            continue
+        values = []
+        for m in sorted_months:
+            row = months_data.get(m)
+            if row and row[attr_idx] is not None:
+                v = round(float(row[attr_idx]), 2)
+                values.append(v)
+        if values:
+            mean = round(sum(values) / len(values), 2)
+            pct = None
+            if len(values) >= 2 and values[0] != 0:
+                pct = round(((values[-1] - values[0]) / values[0]) * 100, 1)
+            rows.append((attr, values, mean, pct))
+
+    month_labels = []
+    month_short_labels = []
+    for m in sorted_months:
+        y, mn = m.split('_')
+        month_labels.append(f"{mn.capitalize()} {y}")
+        month_short_labels.append(mn[:3].capitalize())
+
+    return render_template('compare_months.html', months=all_sorted,
+        selected=selected, sorted_months=sorted_months,
+        rows=rows, month_labels=month_labels,
+        month_short_labels=month_short_labels,
+        current_year=year)
 
 
 # ---- Track Attribute ----
