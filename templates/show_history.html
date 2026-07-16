@@ -2,12 +2,32 @@
 {% block content %}
 <h2>Expense History</h2>
 
-<form method="post">
-  <label>Start date (YYYY-MM-DD, leave empty for no bound):</label>
-  <input type="text" name="start_date" value="{{ start_date or '' }}"><br>
-  <label>End date (YYYY-MM-DD, leave empty for no bound):</label>
-  <input type="text" name="end_date" value="{{ end_date or '' }}"><br>
-  <button type="submit">Show</button>
+<form method="post" id="history-form">
+  <div class="card">
+    <h3 style="margin:0 0 12px">Selezione rapida</h3>
+    <div class="preset-buttons">
+      <button type="button" onclick="setPreset('this_month')">Questo mese</button>
+      <button type="button" onclick="setPreset('last_3')">Ultimi 3 mesi</button>
+      <button type="button" onclick="setPreset('this_year')">Quest'anno</button>
+      <button type="button" onclick="setPreset('all')">Tutto</button>
+    </div>
+
+    <h3 style="margin:0 0 8px">Seleziona mesi</h3>
+    <div class="month-grid" id="history-month-grid">
+      {% for m in months %}
+      {% set parts = m.split('_') %}
+      {% set sel = m in selected_months|default([]) %}
+      <div class="month-card{% if sel %} selected{% endif %}" onclick="toggleMonth(this)">
+        <input type="checkbox" name="selected_months" value="{{ m }}"{% if sel %} checked{% endif %} hidden>
+        <span class="month-card-label">{{ parts[1][:3]|capitalize }}</span>
+        <span class="month-card-year">{{ parts[0] }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    <button type="button" class="compare-btn" onclick="submitMonths()">Mostra selezionati</button>
+  </div>
+  <input type="hidden" name="start_date" id="start_date" value="{{ start_date or '' }}">
+  <input type="hidden" name="end_date" id="end_date" value="{{ end_date or '' }}">
 </form>
 
 {% if entries is defined %}
@@ -71,4 +91,76 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% endif %}
+
+<script>
+function pad2(n) { return String(n).padStart(2, '0'); }
+
+function fmtDate(d) {
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+}
+
+function lastDay(y, m) {
+  return new Date(y, m + 1, 0).getDate();
+}
+
+function setPreset(type) {
+  var now = new Date();
+  var y = now.getFullYear();
+  var m = now.getMonth();
+  var start, end;
+  switch (type) {
+    case 'this_month':
+      start = fmtDate(new Date(y, m, 1));
+      end = fmtDate(new Date(y, m, lastDay(y, m)));
+      break;
+    case 'last_3':
+      start = fmtDate(new Date(y, m - 2, 1));
+      end = fmtDate(new Date(y, m, lastDay(y, m)));
+      break;
+    case 'this_year':
+      start = fmtDate(new Date(y, 0, 1));
+      end = fmtDate(new Date(y, 11, 31));
+      break;
+    case 'all':
+      document.getElementById('start_date').value = '';
+      document.getElementById('end_date').value = '';
+      document.getElementById('history-form').submit();
+      return;
+  }
+  document.getElementById('start_date').value = start;
+  document.getElementById('end_date').value = end;
+  document.getElementById('history-form').submit();
+}
+
+function toggleMonth(el) {
+  el.classList.toggle('selected');
+  var cb = el.querySelector('input[type="checkbox"]');
+  if (cb) cb.checked = !cb.checked;
+}
+
+function submitMonths() {
+  var checked = document.querySelectorAll('#history-month-grid input:checked');
+  if (!checked.length) {
+    document.getElementById('start_date').value = '';
+    document.getElementById('end_date').value = '';
+    document.getElementById('history-form').submit();
+    return;
+  }
+  var months = [];
+  checked.forEach(function(cb) { months.push(cb.value); });
+  var MONTH_NAMES = ['','GENNAIO','FEBBRAIO','MARZO','APRILE','MAGGIO','GIUGNO','LUGLIO','AGOSTO','SETTEMBRE','OTTOBRE','NOVEMBRE','DICEMBRE'];
+  months.sort(function(a, b) {
+    var pa = a.split('_'), pb = b.split('_');
+    if (pa[0] !== pb[0]) return parseInt(pa[0]) - parseInt(pb[0]);
+    return MONTH_NAMES.indexOf(pa[1]) - MONTH_NAMES.indexOf(pb[1]);
+  });
+  var first = months[0].split('_');
+  var last = months[months.length - 1].split('_');
+  var y1 = parseInt(first[0]), y2 = parseInt(last[0]);
+  var m1 = MONTH_NAMES.indexOf(first[1]), m2 = MONTH_NAMES.indexOf(last[1]);
+  document.getElementById('start_date').value = fmtDate(new Date(y1, m1 - 1, 1));
+  document.getElementById('end_date').value = fmtDate(new Date(y2, m2 - 1, lastDay(y2, m2 - 1)));
+  document.getElementById('history-form').submit();
+}
+</script>
 {% endblock %}

@@ -183,8 +183,9 @@ def data_analysis_tracking():
     all_sorted = sm.get_months_list(year)
 
     all_months_data = sm.get_months_data(all_sorted)
+    trackable_attrs = [a for a in SQL_ATTRIBUTES_ALL if a != 'mese']
     tracking_data = {}
-    for attr in SQL_ATTRIBUTES_EDITABLE:
+    for attr in trackable_attrs:
         attr_idx = SQL_ATTRIBUTES_ALL.index(attr)
         values = []
         for m in all_sorted:
@@ -202,6 +203,7 @@ def data_analysis_tracking():
 
     return render_template('tracking.html',
         tracking_data=tracking_data, all_month_labels=all_month_labels,
+        trackable_attrs=trackable_attrs,
         months=all_sorted, active_view='tracking', current_year=year)
 
 
@@ -214,6 +216,10 @@ def compare_months_redirect():
 @app.route('/track-attribute', methods=['GET', 'POST'])
 def track_attribute_redirect():
     return redirect(url_for('data_analysis_tracking'))
+
+@app.route('/show-history', methods=['GET', 'POST'])
+def show_history_redirect():
+    return redirect(url_for('data_analysis_history'))
 
 
 # ---- Undo Expense ----
@@ -276,15 +282,18 @@ def undo_expense():
         last_expense=None, current_year=year)
 
 
-# ---- Show History ----
+# ---- Data Analysis / History ----
 
-@app.route('/show-history', methods=['GET', 'POST'])
-def show_history():
+@app.route('/data-analysis/history', methods=['GET', 'POST'])
+def data_analysis_history():
     sm = get_db()
+    year = session.get('year')
+    months = sm.get_months_list(year)
 
     start = end = None
     entries = None
     month_counts = {}
+    selected_months = request.form.getlist('selected_months') if request.method == 'POST' else []
     if request.method == 'POST':
         start_raw = request.form.get('start_date', '').strip()
         end_raw = request.form.get('end_date', '').strip()
@@ -303,7 +312,10 @@ def show_history():
     return render_template('show_history.html',
         entries=entries, start_date=start, end_date=end,
         month_counts=month_counts,
-        current_year=session.get('year'))
+        months=months,
+        selected_months=selected_months,
+        active_view='history',
+        current_year=year)
 
 
 # ---- Change Year ----

@@ -92,19 +92,19 @@ class SQLManager:
 
     
     def get_registro_entries(self, start_date=None, end_date=None):
-        """Get entries from registro_spese filtered by optional date range (YYYY-MM-DD)"""
+        """Get entries from registro_spese filtered by optional date range on `data` column (YYYY-MM-DD or YYYY-MM)"""
         query = "SELECT id, timestamp, categoria, nota, importo, data FROM registro_spese"
         params = []
         conditions = []
         if start_date:
-            conditions.append("date(timestamp) >= ?")
-            params.append(start_date)
+            conditions.append("substr(data, 4, 4) || '-' || substr(data, 1, 2) >= ?")
+            params.append(start_date[:7])
         if end_date:
-            conditions.append("date(timestamp) <= ?")
-            params.append(end_date)
+            conditions.append("substr(data, 4, 4) || '-' || substr(data, 1, 2) <= ?")
+            params.append(end_date[:7])
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
-        query += " ORDER BY timestamp"
+        query += " ORDER BY substr(data, 4, 4) || '-' || substr(data, 1, 2), timestamp"
         return self.cursor.execute(query, params).fetchall()
 
 

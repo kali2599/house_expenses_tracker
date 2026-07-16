@@ -114,6 +114,15 @@
   {% if sorted_months|length >= 2 %}
   <div class="chart-card full">
     <h4>Trend Categorie</h4>
+    <div class="trend-toggles">
+      {% for attr, values, mean, pct in rows %}
+      <label>
+        <input type="checkbox" data-attr="{{ attr }}"
+          {% if attr in ('spesa','svago','varie','pasti_fuori','inaspettate','uscite_variabili') %}checked{% endif %}
+          onchange="updateTrend()"> {{ attr }}
+      </label>
+      {% endfor %}
+    </div>
     <canvas id="chart-trend" height="280"></canvas>
   </div>
   {% endif %}
@@ -182,7 +191,6 @@
 var VARIABILI = ['spesa','pasti_fuori','svago','shopping','inaspettate','varie','salute','vacanze'];
 var FISSE = ['abbonamenti','investimenti','assicurazioni','condominio','luce','gas','mutuo','lenti','telefonia','parrucchiere','palestra'];
 var COMPUTED = ['uscite_variabili','uscite_fisse','uscite_totali','delta'];
-var TOP_ATTRS = ['spesa','pasti_fuori','svago','shopping','abbonamenti','luce','gas','telefonia'];
 
 var MONTH_LABELS = {{ month_labels|tojson }};
 var CHART_ROWS = [
@@ -244,12 +252,17 @@ function renderStackedBar() {
   });
 }
 
+var trendChart = null;
+
 function renderTrendLine() {
   var ctx = document.getElementById('chart-trend');
   if (!ctx) return;
+  if (trendChart) trendChart.destroy();
   var datasets = [];
-  var colors = ['#e74c3c','#e67e22','#f1c40f','#2ecc71','#3498db','#9b59b6','#1abc9c','#e84393'];
-  TOP_ATTRS.forEach(function(attr, i) {
+  var colors = ['#e74c3c','#e67e22','#f1c40f','#2ecc71','#3498db','#9b59b6','#1abc9c','#e84393','#95a5a6','#34495e','#d35400','#27ae60','#8e44ad','#2c3e50','#f39c12','#16a085'];
+  var checked = document.querySelectorAll('.trend-toggles input[type="checkbox"]:checked');
+  checked.forEach(function(cb, i) {
+    var attr = cb.getAttribute('data-attr');
     var row = getRow(attr);
     if (row) {
       datasets.push({
@@ -263,7 +276,8 @@ function renderTrendLine() {
       });
     }
   });
-  new Chart(ctx, {
+  if (!datasets.length) return;
+  trendChart = new Chart(ctx, {
     type: 'line',
     data: { labels: MONTH_LABELS, datasets: datasets },
     options: {
@@ -274,6 +288,8 @@ function renderTrendLine() {
   });
 }
 
+function updateTrend() { renderTrendLine(); }
+
 function renderDonuts() {
   for (var m = 0; m < NUM_MONTHS; m++) {
     var ctx = document.getElementById('donut-' + m);
@@ -281,11 +297,12 @@ function renderDonuts() {
     var labels = [];
     var data = [];
     var colors = [];
-    var palette = ['#e74c3c','#e67e22','#f1c40f','#2ecc71','#3498db','#9b59b6','#1abc9c','#e84393','#95a5a6','#34495e','#d35400','#27ae60'];
+    var palette = ['#e74c3c','#e67e22','#f1c40f','#2ecc71','#3498db','#9b59b6','#1abc9c','#e84393','#95a5a6','#34495e','#d35400','#27ae60','#8e44ad','#2c3e50','#f39c12','#16a085'];
     var ci = 0;
-    TOP_ATTRS.concat(COMPUTED.filter(function(a) { return a !== 'uscite_totali' && a !== 'delta'; })).forEach(function(attr) {
-      var row = getRow(attr);
-      if (row && row.values[m] > 0) {
+    CHART_ROWS.forEach(function(row) {
+      var attr = row.attr;
+      if (attr === 'entrate' || attr === 'uscite_variabili' || attr === 'uscite_fisse' || attr === 'uscite_totali' || attr === 'delta') return;
+      if (row.values[m] > 0) {
         labels.push(attr);
         data.push(row.values[m]);
         colors.push(palette[ci++ % palette.length]);
@@ -410,7 +427,7 @@ document.addEventListener('DOMContentLoaded', function() {
   renderIncomeBar();
   renderStackedBar();
   {% if sorted_months|length >= 2 %}
-  renderTrendLine();
+  updateTrend();
   {% endif %}
   renderDonuts();
 });

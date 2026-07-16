@@ -15,10 +15,10 @@
     <div class="nav-dropdown-content">
       <a href="/data-analysis/tracking" class="{% if active_view|default('') == 'tracking' %}nav-active{% endif %}">Tracciamento</a>
       <a href="/data-analysis/comparison" class="{% if active_view|default('') == 'comparison' %}nav-active{% endif %}">Confronto</a>
+      <a href="/data-analysis/history" class="{% if active_view|default('') == 'history' %}nav-active{% endif %}">Storico</a>
     </div>
   </div>
   <a href="/undo-expense">Undo Expense</a>
-  <a href="/show-history">Show History</a>
   <span class="nav-year">
     Year: {{ current_year }}
     <a href="/change-year" class="small-link">[change]</a>
