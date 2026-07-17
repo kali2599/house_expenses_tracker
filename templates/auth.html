@@ -1,0 +1,22 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2>Benvenuto in House Expenses Tracker</h2>
+<div class="auth-layout">
+  <div class="card">
+    <h3>Login</h3>
+    <form method="post" action="/login">
+      <input type="text" name="username" placeholder="Username" required style="width:100%;margin-bottom:8px;padding:8px;box-sizing:border-box">
+      <input type="password" name="password" placeholder="Password" required style="width:100%;margin-bottom:12px;padding:8px;box-sizing:border-box">
+      <button type="submit">Accedi</button>
+    </form>
+  </div>
+  <div class="card">
+    <h3>Registrazione</h3>
+    <form method="post" action="/signup">
+      <input type="text" name="username" placeholder="Username" required style="width:100%;margin-bottom:8px;padding:8px;box-sizing:border-box">
+      <input type="password" name="password" placeholder="Password" required style="width:100%;margin-bottom:12px;padding:8px;box-sizing:border-box">
+      <button type="submit">Crea account</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

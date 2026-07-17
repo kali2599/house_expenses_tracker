@@ -104,7 +104,7 @@ class SQLManager:
             params.append(end_date[:7])
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
-        query += " ORDER BY substr(data, 4, 4) || '-' || substr(data, 1, 2), timestamp"
+        query += " ORDER BY substr(data, 4, 4) || '-' || substr(data, 1, 2) DESC, timestamp DESC"
         return self.cursor.execute(query, params).fetchall()
 
 
@@ -159,8 +159,4 @@ class SQLManager:
         return None
 
 
-if __name__ == "__main__":
-    db = open("./database_path", "r").read().strip()
-    sql_manager = SQLManager(db)
-    sql_manager.add_month_entry("2026_APRILE")
-    sql_manager.close()
+

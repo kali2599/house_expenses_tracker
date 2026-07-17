@@ -1,37 +1,204 @@
 from flask import Flask, render_template, request, session, redirect, url_for, flash
 from datetime import datetime
-import os
+import os, functools, sqlite3
+from werkzeug.security import generate_password_hash, check_password_hash
 
 from settings import *
 from sqlManager import SQLManager
 from utils import parse_date_bound, get_color_for_attribute
 
 
-def get_db():
-    global _sql_manager
-    if '_sql_manager' not in globals() or _sql_manager is None:
-        db_path = open("./database_path", "r").read().strip()
-        if not os.path.isfile(db_path):
-            print(f"Database not found: {db_path}")
-            exit(1)
-        _sql_manager = SQLManager(db_path)
-    return _sql_manager
+# ─── Users DB ───
 
+def get_users_db():
+    return sqlite3.connect(USERS_DB)
+
+def init_users_db():
+    os.makedirs(USER_DB_DIR, exist_ok=True)
+    db = get_users_db()
+    db.execute("""CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        db_path TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'basic',
+        blocked INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )""")
+    for col in ["role TEXT NOT NULL DEFAULT 'basic'", "blocked INTEGER NOT NULL DEFAULT 0"]:
+        try:
+            db.execute(f"ALTER TABLE users ADD COLUMN {col}")
+        except sqlite3.OperationalError:
+            pass
+    db.executescript("""
+        CREATE TABLE IF NOT EXISTS groups (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            created_by INTEGER NOT NULL REFERENCES users(id),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS group_members (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            group_id INTEGER NOT NULL REFERENCES groups(id),
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            invited_by INTEGER NOT NULL REFERENCES users(id),
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(group_id, user_id)
+        );
+    """)
+    db.execute("UPDATE users SET role = 'basic' WHERE role IS NULL")
+    db.commit()
+    db.close()
+
+init_users_db()
+
+
+# ─── App setup ───
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)
+
+KEY_FILE = 'flask_secret.key'
+if os.path.exists(KEY_FILE):
+    with open(KEY_FILE, 'rb') as f:
+        app.secret_key = f.read()
+else:
+    app.secret_key = os.urandom(24)
+    with open(KEY_FILE, 'wb') as f:
+        f.write(app.secret_key)
 
 app.jinja_env.globals.update(zip=zip)
 app.jinja_env.globals.update(get_color_for_attribute=get_color_for_attribute)
 app.jinja_env.globals.update(MONTHS_INDEX=MONTHS_INDEX)
 app.jinja_env.globals.update(SQL_ATTRIBUTES_ALL=SQL_ATTRIBUTES_ALL)
 app.jinja_env.globals.update(SQL_ATTRIBUTES_EDITABLE=SQL_ATTRIBUTES_EDITABLE)
+app.jinja_env.globals.update(SESSION=session)
 
+
+# ─── Context processor ───
+
+@app.context_processor
+def inject_globals():
+    inv_count = 0
+    if session.get('user_id'):
+        db = get_users_db()
+        inv_count = db.execute(
+            "SELECT COUNT(*) FROM group_members WHERE user_id = ? AND status = 'pending'",
+            (session['user_id'],)
+        ).fetchone()[0]
+        db.close()
+    return dict(pending_invites_count=inv_count)
+
+
+# ─── Auth decorators ───
+
+def login_required(f):
+    @functools.wraps(f)
+    def decorated(*args, **kwargs):
+        if 'user_id' not in session:
+            return render_template('auth.html', current_year=session.get('year'))
+        return f(*args, **kwargs)
+    return decorated
+
+def role_required(*roles):
+    def decorator(f):
+        @functools.wraps(f)
+        def wrapper(*args, **kwargs):
+            if 'user_id' not in session:
+                return render_template('auth.html', current_year=session.get('year'))
+            if session.get('role') not in roles:
+                flash("Accesso negato.", "error")
+                return redirect(url_for('index'))
+            return f(*args, **kwargs)
+        return wrapper
+    return decorator
+
+
+# ─── Permission helpers ───
+
+def can_view_user(target_username):
+    role = session.get('role')
+    user_id = session.get('user_id')
+    own_username = session.get('username')
+    if target_username == own_username:
+        return True
+    if role == 'super_admin':
+        return True
+    if role == 'admin':
+        db = get_users_db()
+        target = db.execute("SELECT id FROM users WHERE username = ?", (target_username,)).fetchone()
+        if not target:
+            db.close()
+            return False
+        target_id = target[0]
+        count = db.execute("""
+            SELECT COUNT(*) FROM group_members gm
+            JOIN groups g ON g.id = gm.group_id
+            WHERE gm.user_id = ? AND g.created_by = ? AND gm.status = 'accepted'
+        """, (target_id, user_id)).fetchone()[0]
+        db.close()
+        return count > 0
+    return False
+
+
+def get_visible_users():
+    role = session.get('role')
+    user_id = session.get('user_id')
+    own_username = session.get('username')
+    db = get_users_db()
+    if role == 'super_admin':
+        users = [r[0] for r in db.execute("SELECT username FROM users ORDER BY username").fetchall()]
+    elif role == 'admin':
+        users = db.execute("""
+            SELECT DISTINCT u.username FROM users u
+            LEFT JOIN group_members gm ON gm.user_id = u.id AND gm.status = 'accepted'
+            LEFT JOIN groups g ON g.id = gm.group_id AND g.created_by = ?
+            WHERE u.id = ? OR (g.id IS NOT NULL)
+            ORDER BY u.username
+        """, (user_id, user_id)).fetchall()
+        users = [r[0] for r in users]
+    else:
+        users = [own_username]
+    db.close()
+    return users
+
+
+def get_db_for_user(target_username):
+    if not can_view_user(target_username):
+        flash("Accesso negato a questo utente.", "error")
+        return None
+    db = get_users_db()
+    target = db.execute("SELECT db_path FROM users WHERE username = ?", (target_username,)).fetchone()
+    db.close()
+    if not target:
+        flash("Utente non trovato.", "error")
+        return None
+    if not os.path.isfile(target[0]):
+        flash("Database utente non trovato.", "error")
+        return None
+    return SQLManager(target[0])
+
+
+def get_user_list():
+    db = get_users_db()
+    users = db.execute(
+        "SELECT id, username, role, blocked, created_at FROM users ORDER BY created_at"
+    ).fetchall()
+    db.close()
+    return users
+
+
+# ─── DB helper ───
+
+def get_db():
+    return SQLManager(session.get('db_path'))
 
 def ensure_month(sm, month):
     if not sm.check_month_exists(month):
         sm.add_month_entry(month)
 
+
+# ─── Before request ───
 
 @app.before_request
 def ensure_year():
@@ -39,16 +206,350 @@ def ensure_year():
         session['year'] = datetime.now().year
 
 
+# ─── Auth routes ───
+
 @app.route('/')
 def index():
+    if 'user_id' in session:
+        return redirect(url_for('add_expense'))
+    return render_template('auth.html', current_year=session.get('year'))
+
+
+@app.route('/login', methods=['POST'])
+def login():
+    username = request.form.get('username', '').strip()
+    password = request.form.get('password', '')
+
+    if not username or not password:
+        flash("Inserisci username e password.", "error")
+        return render_template('auth.html', current_year=session.get('year'))
+
+    db = get_users_db()
+    user = db.execute(
+        "SELECT id, username, password_hash, db_path, role, blocked FROM users WHERE username = ?",
+        (username,)
+    ).fetchone()
+    db.close()
+
+    if not user or not check_password_hash(user[2], password):
+        flash("Username o password errati.", "error")
+        return render_template('auth.html', current_year=session.get('year'))
+
+    if user[5]:
+        flash("Account bloccato. Contatta un amministratore.", "error")
+        return render_template('auth.html', current_year=session.get('year'))
+
+    session['user_id'] = user[0]
+    session['username'] = user[1]
+    session['db_path'] = user[3]
+    session['role'] = user[4]
+    flash(f"Benvenuto, {user[1]}!", "success")
     return redirect(url_for('add_expense'))
 
 
-# ---- Add Expense ----
+@app.route('/signup', methods=['POST'])
+def signup():
+    username = request.form.get('username', '').strip()
+    password = request.form.get('password', '')
+
+    if not username or not password:
+        flash("Inserisci username e password.", "error")
+        return render_template('auth.html', current_year=session.get('year'))
+
+    if not username.isalnum():
+        flash("Lo username può contenere solo lettere e numeri.", "error")
+        return render_template('auth.html', current_year=session.get('year'))
+
+    user_db_path = os.path.join(USER_DB_DIR, f"{username}.db")
+    db_users = get_users_db()
+
+    existing = db_users.execute(
+        "SELECT id FROM users WHERE username = ?", (username,)
+    ).fetchone()
+    if existing or os.path.exists(user_db_path):
+        db_users.close()
+        flash("Username già esistente.", "error")
+        return render_template('auth.html', current_year=session.get('year'))
+
+    os.makedirs(USER_DB_DIR, exist_ok=True)
+    new_db = SQLManager(user_db_path)
+    init_sql = open('init.sql').read()
+    new_db.cursor.executescript(init_sql)
+
+    year = session.get('year', datetime.now().year)
+    for m in range(1, 13):
+        month_key = f"{year}_{MONTHS_INDEX[m]}"
+        new_db.add_month_entry(month_key)
+    new_db.close()
+
+    password_hash = generate_password_hash(password)
+    db_users.execute(
+        "INSERT INTO users (username, password_hash, db_path, role) VALUES (?, ?, ?, 'basic')",
+        (username, password_hash, user_db_path)
+    )
+    db_users.commit()
+    user_id = db_users.execute(
+        "SELECT id FROM users WHERE username = ?", (username,)
+    ).fetchone()[0]
+    db_users.close()
+
+    session['user_id'] = user_id
+    session['username'] = username
+    session['db_path'] = user_db_path
+    session['role'] = 'basic'
+    flash(f"Account creato! Benvenuto, {username}!", "success")
+    return redirect(url_for('add_expense'))
+
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    flash("Logout effettuato.", "info")
+    return redirect(url_for('index'))
+
+
+# ─── Admin: User management ───
+
+@app.route('/admin/users')
+@login_required
+@role_required('super_admin')
+def admin_users():
+    users = get_user_list()
+    return render_template('admin_users.html', users=users, current_year=session.get('year'))
+
+
+@app.route('/admin/users/<int:uid>/promote', methods=['POST'])
+@login_required
+@role_required('super_admin')
+def admin_user_promote(uid):
+    db = get_users_db()
+    user = db.execute("SELECT id, username, role FROM users WHERE id = ?", (uid,)).fetchone()
+    if user and user[2] == 'basic':
+        db.execute("UPDATE users SET role = 'admin' WHERE id = ?", (uid,))
+        db.commit()
+        flash(f"Utente '{user[1]}' promosso ad Admin.", "success")
+    else:
+        flash("Utente non trovato o già Admin.", "error")
+    db.close()
+    return redirect(url_for('admin_users'))
+
+
+@app.route('/admin/users/<int:uid>/demote', methods=['POST'])
+@login_required
+@role_required('super_admin')
+def admin_user_demote(uid):
+    db = get_users_db()
+    user = db.execute("SELECT id, username, role FROM users WHERE id = ?", (uid,)).fetchone()
+    if user and user[2] == 'admin':
+        db.execute("UPDATE users SET role = 'basic' WHERE id = ?", (uid,))
+        db.commit()
+        flash(f"Utente '{user[1]}' declassato a Basic.", "success")
+    else:
+        flash("Utente non trovato o non è Admin.", "error")
+    db.close()
+    return redirect(url_for('admin_users'))
+
+
+@app.route('/admin/users/<int:uid>/remove', methods=['POST'])
+@login_required
+@role_required('super_admin')
+def admin_user_remove(uid):
+    if uid == session['user_id']:
+        flash("Non puoi rimuovere te stesso.", "error")
+        return redirect(url_for('admin_users'))
+
+    db = get_users_db()
+    user = db.execute("SELECT id, username, db_path, role FROM users WHERE id = ?", (uid,)).fetchone()
+    if not user:
+        db.close()
+        flash("Utente non trovato.", "error")
+        return redirect(url_for('admin_users'))
+
+    if user[3] == 'super_admin':
+        db.close()
+        flash("Non puoi rimuovere un Super Admin.", "error")
+        return redirect(url_for('admin_users'))
+
+    username = user[1]
+    db_path = user[2]
+
+    db.execute("DELETE FROM group_members WHERE user_id = ?", (uid,))
+    db.execute("DELETE FROM groups WHERE created_by = ?", (uid,))
+    db.execute("DELETE FROM users WHERE id = ?", (uid,))
+    db.commit()
+    db.close()
+
+    if os.path.exists(db_path):
+        os.remove(db_path)
+
+    flash(f"Utente '{username}' rimosso.", "success")
+    return redirect(url_for('admin_users'))
+
+
+# ─── Admin: Groups ───
+
+@app.route('/admin/groups', methods=['GET', 'POST'])
+@login_required
+@role_required('admin', 'super_admin')
+def admin_groups():
+    user_id = session['user_id']
+    role = session['role']
+    db = get_users_db()
+
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        if name:
+            try:
+                db.execute("INSERT INTO groups (name, created_by) VALUES (?, ?)", (name, user_id))
+                db.commit()
+                flash(f"Gruppo '{name}' creato.", "success")
+            except sqlite3.IntegrityError:
+                flash("Nome gruppo già esistente.", "error")
+        else:
+            flash("Inserisci un nome per il gruppo.", "error")
+
+    if role == 'super_admin':
+        groups = db.execute(
+            "SELECT g.id, g.name, u.username, g.created_at FROM groups g JOIN users u ON u.id = g.created_by ORDER BY g.created_at"
+        ).fetchall()
+    else:
+        groups = db.execute(
+            "SELECT g.id, g.name, u.username, g.created_at FROM groups g JOIN users u ON u.id = g.created_by WHERE g.created_by = ? ORDER BY g.created_at",
+            (user_id,)
+        ).fetchall()
+    db.close()
+    return render_template('admin_groups.html', groups=groups, current_year=session.get('year'))
+
+
+@app.route('/admin/groups/<int:gid>', methods=['GET', 'POST'])
+@login_required
+@role_required('admin', 'super_admin')
+def admin_group_detail(gid):
+    user_id = session['user_id']
+    role = session['role']
+    db = get_users_db()
+
+    group = db.execute(
+        "SELECT g.id, g.name, g.created_by FROM groups g WHERE g.id = ?", (gid,)
+    ).fetchone()
+    if not group:
+        db.close()
+        flash("Gruppo non trovato.", "error")
+        return redirect(url_for('admin_groups'))
+
+    if role != 'super_admin' and group[2] != user_id:
+        db.close()
+        flash("Accesso negato.", "error")
+        return redirect(url_for('admin_groups'))
+
+    if request.method == 'POST':
+        action = request.form.get('action', '')
+
+        if action == 'invite':
+            target_username = request.form.get('username', '').strip()
+            target = db.execute("SELECT id FROM users WHERE username = ?", (target_username,)).fetchone()
+            if target:
+                try:
+                    db.execute(
+                        "INSERT INTO group_members (group_id, user_id, invited_by, status) VALUES (?, ?, ?, 'pending')",
+                        (gid, target[0], user_id)
+                    )
+                    db.commit()
+                    flash(f"Inviato invito a '{target_username}'.", "success")
+                except sqlite3.IntegrityError:
+                    flash("Utente già membro o già invitato.", "error")
+            else:
+                flash("Utente non trovato.", "error")
+
+        elif action == 'block':
+            member_id = int(request.form.get('member_id'))
+            db.execute("UPDATE group_members SET status = 'blocked' WHERE id = ? AND group_id = ?",
+                       (member_id, gid))
+            db.commit()
+            flash("Utente bloccato nel gruppo.", "success")
+
+        elif action == 'unblock':
+            member_id = int(request.form.get('member_id'))
+            db.execute("UPDATE group_members SET status = 'accepted' WHERE id = ? AND group_id = ?",
+                       (member_id, gid))
+            db.commit()
+            flash("Utente sbloccato nel gruppo.", "success")
+
+        elif action == 'remove_member':
+            member_id = int(request.form.get('member_id'))
+            db.execute("DELETE FROM group_members WHERE id = ? AND group_id = ?", (member_id, gid))
+            db.commit()
+            flash("Membro rimosso dal gruppo.", "success")
+
+    members = db.execute("""
+        SELECT gm.id, u.id, u.username, gm.status
+        FROM group_members gm
+        JOIN users u ON u.id = gm.user_id
+        WHERE gm.group_id = ?
+        ORDER BY gm.created_at
+    """, (gid,)).fetchall()
+
+    candidates = db.execute(
+        "SELECT username FROM users WHERE role = 'basic' AND id NOT IN (SELECT user_id FROM group_members WHERE group_id = ?) AND id != ? ORDER BY username",
+        (gid, group[2])
+    ).fetchall()
+    db.close()
+
+    return render_template('admin_group_detail.html',
+        group=group, members=members, candidates=candidates,
+        current_year=session.get('year'))
+
+
+# ─── Invitations ───
+
+@app.route('/invitations', methods=['GET', 'POST'])
+@login_required
+def invitations():
+    user_id = session['user_id']
+    db = get_users_db()
+
+    if request.method == 'POST':
+        action = request.form.get('action', '')
+        member_id = int(request.form.get('member_id'))
+
+        if action == 'accept':
+            db.execute("UPDATE group_members SET status = 'accepted' WHERE id = ? AND user_id = ? AND status = 'pending'",
+                       (member_id, user_id))
+            db.commit()
+            flash("Invito accettato.", "success")
+        elif action == 'decline':
+            db.execute("UPDATE group_members SET status = 'declined' WHERE id = ? AND user_id = ? AND status = 'pending'",
+                       (member_id, user_id))
+            db.commit()
+            flash("Invito rifiutato.", "info")
+
+    invites = db.execute("""
+        SELECT gm.id, g.name, u.username
+        FROM group_members gm
+        JOIN groups g ON g.id = gm.group_id
+        JOIN users u ON u.id = gm.invited_by
+        WHERE gm.user_id = ? AND gm.status = 'pending'
+    """, (user_id,)).fetchall()
+    db.close()
+
+    return render_template('invitations.html', invites=invites, current_year=session.get('year'))
+
+
+# ─── Add Expense ───
 
 @app.route('/add-expense', methods=['GET', 'POST'])
+@login_required
 def add_expense():
-    sm = get_db()
+    target_user = request.args.get('target_user') or request.form.get('target_user') or session['username']
+
+    if target_user != session['username']:
+        sm = get_db_for_user(target_user)
+        if not sm:
+            return redirect(url_for('add_expense'))
+    else:
+        sm = get_db()
+
+    visible_users = get_visible_users()
     year = session.get('year')
 
     now = datetime.now()
@@ -75,6 +576,7 @@ def add_expense():
             data = sm.get_data_by_month(month)
             return render_template('add_expense.html', month=month,
                 month_name=month_name, month_num=month_num, data_row=data,
+                visible_users=visible_users, target_user=target_user,
                 current_year=year)
 
         if action == 'add':
@@ -87,13 +589,12 @@ def add_expense():
             sm.update_value_by_attrANDmonth(month, attribute, old_val + value)
             sm.commit()
             flash("Spesa aggiunta!", "success")
-            return redirect(url_for('add_expense', month=month))
+            return redirect(url_for('add_expense', month=month, target_user=target_user))
 
         if action == 'add_all':
             attributes = request.form.getlist('attribute[]')
             values = request.form.getlist('value[]')
             notes = request.form.getlist('nota[]')
-            inserted = []
             for attr, val_raw, nota_raw in zip(attributes, values, notes):
                 val = round(float(val_raw), 1)
                 nota = nota_raw.strip() or 'N/A'
@@ -101,12 +602,10 @@ def add_expense():
                 sm.insert_expense_in_registry(attr, nota, val, mese_data)
                 old_val = sm.get_value_by_attrANDmonth(month, attr)
                 sm.update_value_by_attrANDmonth(month, attr, old_val + val)
-                inserted.append((attr, val, nota))
             sm.commit()
-            flash(f"{len(inserted)} spese aggiunte!", "success")
-            return redirect(url_for('add_expense', month=month))
+            flash(f"{len(attributes)} spese aggiunte!", "success")
+            return redirect(url_for('add_expense', month=month, target_user=target_user))
 
-    # GET — preserve month context after PRG redirect
     month_param = request.args.get('month')
     if month_param and '_' in month_param:
         parts = month_param.split('_')
@@ -122,14 +621,25 @@ def add_expense():
     data = sm.get_data_by_month(month)
     return render_template('add_expense.html', month=month,
         month_name=month_name, month_num=month_num, data_row=data,
+        visible_users=visible_users, target_user=target_user,
         current_year=year)
 
 
-# ---- Data Analysis / Comparison ----
+# ─── Data Analysis / Comparison ───
 
 @app.route('/data-analysis/comparison', methods=['GET', 'POST'])
+@login_required
 def data_analysis_comparison():
-    sm = get_db()
+    target_user = request.args.get('target_user') or request.form.get('target_user') or session['username']
+
+    if target_user != session['username']:
+        sm = get_db_for_user(target_user)
+        if not sm:
+            return redirect(url_for('data_analysis_comparison'))
+    else:
+        sm = get_db()
+
+    visible_users = get_visible_users()
     year = session.get('year')
     all_sorted = sm.get_months_list(year)
 
@@ -139,7 +649,6 @@ def data_analysis_comparison():
             flash("Seleziona almeno un mese.", "error")
             selected = all_sorted[-3:] if len(all_sorted) >= 3 else all_sorted[:]
     else:
-        from datetime import datetime
         current_month_key = f"{year}_{MONTHS_INDEX[datetime.now().month]}"
         if current_month_key in all_sorted:
             selected = [current_month_key]
@@ -180,14 +689,25 @@ def data_analysis_comparison():
         selected=selected, sorted_months=sorted_months,
         rows=rows, month_labels=month_labels,
         month_short_labels=month_short_labels,
+        visible_users=visible_users, target_user=target_user,
         active_view='comparison', current_year=year)
 
 
-# ---- Data Analysis / Tracking ----
+# ─── Data Analysis / Tracking ───
 
 @app.route('/data-analysis/tracking')
+@login_required
 def data_analysis_tracking():
-    sm = get_db()
+    target_user = request.args.get('target_user') or session['username']
+
+    if target_user != session['username']:
+        sm = get_db_for_user(target_user)
+        if not sm:
+            return redirect(url_for('data_analysis_tracking'))
+    else:
+        sm = get_db()
+
+    visible_users = get_visible_users()
     year = session.get('year')
     all_sorted = sm.get_months_list(year)
 
@@ -213,29 +733,44 @@ def data_analysis_tracking():
     return render_template('tracking.html',
         tracking_data=tracking_data, all_month_labels=all_month_labels,
         trackable_attrs=trackable_attrs,
-        months=all_sorted, active_view='tracking', current_year=year)
+        months=all_sorted,
+        visible_users=visible_users, target_user=target_user,
+        active_view='tracking', current_year=year)
 
 
-# ---- Redirects ----
+# ─── Redirects ───
 
 @app.route('/compare-months', methods=['GET', 'POST'])
+@login_required
 def compare_months_redirect():
     return redirect(url_for('data_analysis_comparison'))
 
 @app.route('/track-attribute', methods=['GET', 'POST'])
+@login_required
 def track_attribute_redirect():
     return redirect(url_for('data_analysis_tracking'))
 
 @app.route('/show-history', methods=['GET', 'POST'])
+@login_required
 def show_history_redirect():
     return redirect(url_for('data_analysis_history'))
 
 
-# ---- Undo Expense ----
+# ─── Undo Expense ───
 
 @app.route('/undo-expense', methods=['GET', 'POST'])
+@login_required
 def undo_expense():
-    sm = get_db()
+    target_user = request.args.get('target_user') or request.form.get('target_user') or session['username']
+
+    if target_user != session['username']:
+        sm = get_db_for_user(target_user)
+        if not sm:
+            return redirect(url_for('undo_expense'))
+    else:
+        sm = get_db()
+
+    visible_users = get_visible_users()
     year = session.get('year')
     months = sm.get_months_list(year)
 
@@ -286,14 +821,25 @@ def undo_expense():
         expenses=expenses,
         selected_month=selected_month,
         months=months,
+        visible_users=visible_users, target_user=target_user,
         current_year=year)
 
 
-# ---- Data Analysis / History ----
+# ─── Data Analysis / History ───
 
 @app.route('/data-analysis/history', methods=['GET', 'POST'])
+@login_required
 def data_analysis_history():
-    sm = get_db()
+    target_user = request.args.get('target_user') or request.form.get('target_user') or session['username']
+
+    if target_user != session['username']:
+        sm = get_db_for_user(target_user)
+        if not sm:
+            return redirect(url_for('data_analysis_history'))
+    else:
+        sm = get_db()
+
+    visible_users = get_visible_users()
     year = session.get('year')
     months = sm.get_months_list(year)
 
@@ -321,13 +867,15 @@ def data_analysis_history():
         month_counts=month_counts,
         months=months,
         selected_months=selected_months,
+        visible_users=visible_users, target_user=target_user,
         active_view='history',
         current_year=year)
 
 
-# ---- Change Year ----
+# ─── Change Year ───
 
 @app.route('/change-year', methods=['GET', 'POST'])
+@login_required
 def change_year():
     if request.method == 'POST':
         try:
@@ -341,8 +889,4 @@ def change_year():
 
 
 if __name__ == "__main__":
-    if not os.path.exists("./database_path"):
-        print("Database path file not found. Create it with the path to your .db file.")
-        exit(1)
-    _sql_manager = None
     app.run(host="0.0.0.0", port=PORT, debug=True)

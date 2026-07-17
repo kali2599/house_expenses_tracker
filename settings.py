@@ -18,3 +18,7 @@ SQL_ATTRIBUTES_EDITABLE = ['entrate', 'spesa', 'pasti_fuori', 'svago', 'shopping
 
 ### WEB PARAMETERS
 PORT = 5000
+
+### MULTI-USER
+USER_DB_DIR = "user_data"
+USERS_DB = "users.db"

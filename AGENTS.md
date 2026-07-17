@@ -3,20 +3,19 @@
 ## TL;DR
 ```bash
 pip install -r requirements.txt   # install flask
-sqlite3 data.db < init.sql        # create schema
-python3 main.py                   # run web server
+python3 main.py                   # run web server — sign up via browser
 ```
 
-Open browser at `http://localhost:443` (port set in `settings.py`).
+Open browser at `http://localhost:5000` (port set in `settings.py`).
 
 ## Architecture
 
 | File | Role |
 |---|---|
-| `main.py` | Flask app — routes, request handling, server startup |
-| `sqlManager.py` | SQLite data access layer (unchanged) |
+| `main.py` | Flask app — routes, request handling, auth, server startup |
+| `sqlManager.py` | SQLite data access layer (per-user database) |
 | `utils.py` | Helpers: `parse_date_bound`, `get_color_for_attribute` (no terminal output) |
-| `settings.py` | Constants: `PORT`, `MONTHS_INDEX`, attribute lists |
+| `settings.py` | Constants: `PORT`, `MONTHS_INDEX`, attribute lists, `USER_DB_DIR`, `USERS_DB` |
 | `templates/` | Jinja2 HTML templates (one per feature) |
 | `static/style.css` | Minimal CSS |
 
@@ -24,8 +23,10 @@ Open browser at `http://localhost:443` (port set in `settings.py`).
 
 - **Language**: Italian — month names (`GENNAIO`, `FEBBRAIO`, …), all UI strings. Keep it consistent.
 - **DB**: SQLite only. Flask is the only external dependency.
-- **DB path**: Stored in `database_path` file (gitignored). App reads it at startup.
-- **Port**: Set via `settings.py:PORT` (default `443`). Change to `5000` for dev without sudo.
+- **Auth**: Multi-user via `users.db` (central) + per-user SQLite DB in `user_data/`. Signup creates a fresh DB from `init.sql`. Login sets `session['db_path']`.
+- **Legacy DB path**: Stored in `database_path` file (gitignored). Used only by `init_user_db.py` to migrate existing data to user `davide`.
+- **Port**: Set via `settings.py:PORT` (default `5000`).
+- **Secret key**: Persisted in `flask_secret.key` so sessions survive server restarts.
 - **Computed columns**: `uscite_variabili`, `uscite_fisse`, `uscite_totali`, `delta` are maintained by SQLite triggers (see `init.sql`). Do not touch them from Python.
 - **Year**: Stored in Flask session (`session['year']`). Defaults to current year on first visit. Change via `/change-year`.
 

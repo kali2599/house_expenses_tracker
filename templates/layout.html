@@ -8,6 +8,7 @@
 </head>
 <body>
 <div id="nav">
+  {% if session.username %}
   <span class="nav-title">House Expenses Tracker</span>
   <a href="/add-expense">Add Expense</a>
   <div class="nav-dropdown">
@@ -23,6 +24,10 @@
     Year: {{ current_year }}
     <a href="/change-year" class="small-link">[change]</a>
   </span>
+  <span class="nav-user">
+    {{ session.username }} <a href="/logout" class="small-link">[logout]</a>
+  </span>
+  {% endif %}
 </div>
 <div id="content">
 {% for category, message in get_flashed_messages(with_categories=true) %}

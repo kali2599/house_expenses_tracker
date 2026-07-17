@@ -4,3 +4,6 @@ push_db.sh
 database_path
 test.sh
 venv/
+flask_secret.key
+users.db
+user_data/

@@ -4,7 +4,8 @@ CREATE TABLE registro_spese (
     timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
     categoria TEXT,
     nota TEXT,
-    importo REAL
+    importo REAL,
+    data TEXT
 );
 
 
