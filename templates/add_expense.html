@@ -40,7 +40,6 @@
       </form>
     </div>
 
-    {% if not done %}
     <div class="card" id="expense-card">
       <h3>Aggiungi spese per <strong>{{ month_name }}</strong></h3>
       <form method="post" id="expense-form">
@@ -78,17 +77,6 @@
         <button type="submit" name="action" value="add_all" class="submit-all-btn">Insert all</button>
       </form>
     </div>
-    {% else %}
-    <div class="card success">
-      <p>{{ inserted|length }} spese aggiunte:</p>
-      <ul class="inserted-list">
-        {% for attr, val, nota in inserted %}
-        <li><strong>{{ attr }}</strong>: {{ "%.2f"|format(val) }} ({{ nota }})</li>
-        {% endfor %}
-      </ul>
-      <a href="/add-expense">Aggiungi altre spese</a>
-    </div>
-    {% endif %}
   </div>
 </div>
 

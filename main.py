@@ -87,10 +87,7 @@ def add_expense():
             sm.update_value_by_attrANDmonth(month, attribute, old_val + value)
             sm.commit()
             flash("Spesa aggiunta!", "success")
-            data = sm.get_data_by_month(month)
-            return render_template('add_expense.html', month=month,
-                month_name=month_name, month_num=month_num, data_row=data,
-                done=True, inserted=[(attribute, value, nota)], current_year=year)
+            return redirect(url_for('add_expense', month=month))
 
         if action == 'add_all':
             attributes = request.form.getlist('attribute[]')
@@ -107,10 +104,19 @@ def add_expense():
                 inserted.append((attr, val, nota))
             sm.commit()
             flash(f"{len(inserted)} spese aggiunte!", "success")
-            data = sm.get_data_by_month(month)
-            return render_template('add_expense.html', month=month,
-                month_name=month_name, month_num=month_num, data_row=data,
-                done=True, inserted=inserted, current_year=year)
+            return redirect(url_for('add_expense', month=month))
+
+    # GET — preserve month context after PRG redirect
+    month_param = request.args.get('month')
+    if month_param and '_' in month_param:
+        parts = month_param.split('_')
+        if parts[1] in MONTHS_INDEX.values():
+            month = month_param
+            month_name = parts[1]
+            for num, name in MONTHS_INDEX.items():
+                if name == month_name:
+                    month_num = num
+                    break
 
     ensure_month(sm, month)
     data = sm.get_data_by_month(month)
@@ -156,8 +162,11 @@ def data_analysis_comparison():
         if values:
             mean = round(sum(values) / len(values), 2)
             pct = None
-            if len(values) >= 2 and values[0] != 0:
-                pct = round(((values[-1] - values[0]) / values[0]) * 100, 1)
+            if len(values) >= 2:
+                if values[0] == 0:
+                    pct = 1e10 if values[-1] > 0 else (-1e10 if values[-1] < 0 else 0.0)
+                else:
+                    pct = round(((values[-1] - values[0]) / values[0]) * 100, 1)
             rows.append((attr, values, mean, pct))
 
     month_labels = []
@@ -228,58 +237,56 @@ def show_history_redirect():
 def undo_expense():
     sm = get_db()
     year = session.get('year')
+    months = sm.get_months_list(year)
 
-    month_num = None
-    month = None
+    expenses = None
+    selected_month = None
 
     if request.method == 'POST':
-        month_raw = request.form.get('month')
         action = request.form.get('action', '')
+        month_raw = request.form.get('month', '')
 
         if month_raw:
             if '_' in month_raw:
-                month = month_raw
-                month_name = month.split('_')[1]
-                month_num = int(request.form.get('month_num', 0))
+                selected_month = month_raw
             elif month_raw.isdigit():
                 month_num = int(month_raw)
                 month_name = MONTHS_INDEX[month_num]
-                month = f"{year}_{month_name}"
+                selected_month = f"{year}_{month_name}"
 
         if action == 'show':
-            if not month_num:
+            if not selected_month:
                 flash("Select a month.", "error")
-                return render_template('undo_expense.html',
-                    last_expense=None, current_year=year)
-            last = sm.get_last_expense_for_month(month)
-            if not last:
-                flash("No expenses to undo for this month.", "error")
-                return render_template('undo_expense.html',
-                    last_expense=None, current_year=year)
-            return render_template('undo_expense.html',
-                last_expense=last, month=month, month_num=month_num,
-                current_year=year)
-
-        if action == 'undo':
-            if not month:
-                flash("Invalid month.", "error")
-                return render_template('undo_expense.html',
-                    last_expense=None, current_year=year)
-            last = sm.get_last_expense_for_month(month)
-            if last:
-                expense_id, ts, category, nota, amount, mese_data = last
-                sm.cursor.execute("DELETE FROM registro_spese WHERE id = ?", (expense_id,))
-                cur_val = sm.get_value_by_attrANDmonth(month, category)
-                sm.update_value_by_attrANDmonth(month, category, cur_val - amount)
-                sm.commit()
-                flash("Expense undone successfully!", "success")
             else:
-                flash("No expenses to undo for this month.", "error")
-            return render_template('undo_expense.html',
-                done=True, current_year=year)
+                expenses = sm.get_expenses_for_month(selected_month)
+                if not expenses:
+                    flash("No expenses found for this month.", "info")
+
+        elif action == 'delete':
+            expense_id = request.form.get('expense_id')
+            if not expense_id or not selected_month:
+                flash("Missing expense data.", "error")
+            else:
+                expense = sm.cursor.execute(
+                    "SELECT categoria, importo FROM registro_spese WHERE id = ?",
+                    (expense_id,)
+                ).fetchone()
+                if expense:
+                    category, amount = expense
+                    sm.cursor.execute("DELETE FROM registro_spese WHERE id = ?", (expense_id,))
+                    cur_val = sm.get_value_by_attrANDmonth(selected_month, category)
+                    sm.update_value_by_attrANDmonth(selected_month, category, cur_val - amount)
+                    sm.commit()
+                    flash("Expense deleted successfully!", "success")
+                    expenses = sm.get_expenses_for_month(selected_month)
+                else:
+                    flash("Expense not found.", "error")
 
     return render_template('undo_expense.html',
-        last_expense=None, current_year=year)
+        expenses=expenses,
+        selected_month=selected_month,
+        months=months,
+        current_year=year)
 
 
 # ---- Data Analysis / History ----

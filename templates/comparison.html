@@ -64,7 +64,7 @@
   <button class="tab active" onclick="switchTab('table')">Tabella</button>
   <button class="tab" onclick="switchTab('charts')">Grafici</button>
   <button class="tab" onclick="switchTab('breakdown')">Analisi</button>
-  <button class="tab" onclick="switchTab('change')">Variazione %</button>
+  <button class="tab" onclick="switchTab('change')">Trend</button>
 </div>
 
 <div id="panel-table" class="tab-panel active">
@@ -174,8 +174,13 @@
           {% for v in values %}
           <td>{{ "%.1f"|format(v) }}</td>
           {% endfor %}
-          <td class="pct-cell{% if pct is not none and pct >= 0 %} pct-positive{% elif pct is not none and pct < 0 %} pct-negative{% endif %}">
-            {%- if pct is not none %}{{ "%+.1f"|format(pct) }}%{% else %}N/A{% endif -%}
+          <td class="pct-cell{% if pct is not none and attr != 'entrate' %}{% if pct > 0 %} pct-negative{% elif pct < 0 %} pct-positive{% endif %}{% endif %}">
+            {%- if pct is not none %}
+              {%- if pct > 999999 %}∞
+              {%- elif pct < -999999 %}-∞
+              {%- else %}{{ "%+.1f"|format(pct) }}%
+              {%- endif %}
+            {%- else %}N/A{% endif -%}
           </td>
         </tr>
         {% endfor %}
@@ -219,7 +224,7 @@ function renderIncomeBar() {
       datasets: [
         { label: 'Entrate', data: getRow('entrate').values, backgroundColor: '#0055cc' },
         { label: 'Uscite totali', data: getRow('uscite_totali').values, backgroundColor: '#e74c3c' },
-        { label: 'Delta', data: getRow('delta').values, backgroundColor: getRow('delta').values.map(function(v) { return v >= 0 ? '#2ecc71' : '#8b5cf6'; }) }
+        { label: 'Delta', data: getRow('delta').values, backgroundColor: '#9b59b6' }
       ]
     },
     options: {

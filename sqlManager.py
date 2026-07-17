@@ -124,6 +124,17 @@ class SQLManager:
             (mese_data,)
         ).fetchone()
 
+    def get_expenses_for_month(self, month_key):
+        """Get all expenses for a specific month (month_key = YYYY_MESE), newest first"""
+        year, month_name = month_key.split('_')
+        month_num = self._get_month_number(month_name)
+        mese_data = f"{month_num:02d}-{year}"
+        return self.cursor.execute(
+            "SELECT id, timestamp, categoria, nota, importo, data "
+            "FROM registro_spese WHERE data = ? ORDER BY id DESC",
+            (mese_data,)
+        ).fetchall()
+
 
     def delete_last_expense(self):
         """Delete the last expense and return its details"""
