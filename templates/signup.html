@@ -1,0 +1,15 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2>Registrazione</h2>
+<div class="card" style="max-width:400px;margin:0 auto">
+  <h3>Nuovo account</h3>
+  <form method="post" action="/signup">
+    <input type="text" name="username" placeholder="Username" required style="width:100%;margin-bottom:8px;padding:8px;box-sizing:border-box">
+    <input type="password" name="password" placeholder="Password" required style="width:100%;margin-bottom:12px;padding:8px;box-sizing:border-box">
+    <button type="submit">Crea account</button>
+  </form>
+  <p style="margin-top:16px;text-align:center">
+    Hai già un account? <a href="/">Accedi</a>
+  </p>
+</div>
+{% endblock %}

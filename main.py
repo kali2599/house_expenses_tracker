@@ -96,7 +96,7 @@ def login_required(f):
     @functools.wraps(f)
     def decorated(*args, **kwargs):
         if 'user_id' not in session:
-            return render_template('auth.html', current_year=session.get('year'))
+            return render_template('login.html', current_year=session.get('year'))
         return f(*args, **kwargs)
     return decorated
 
@@ -105,7 +105,7 @@ def role_required(*roles):
         @functools.wraps(f)
         def wrapper(*args, **kwargs):
             if 'user_id' not in session:
-                return render_template('auth.html', current_year=session.get('year'))
+                return render_template('login.html', current_year=session.get('year'))
             if session.get('role') not in roles:
                 flash("Accesso negato.", "error")
                 return redirect(url_for('index'))
@@ -212,7 +212,7 @@ def ensure_year():
 def index():
     if 'user_id' in session:
         return redirect(url_for('add_expense'))
-    return render_template('auth.html', current_year=session.get('year'))
+    return render_template('login.html', current_year=session.get('year'))
 
 
 @app.route('/login', methods=['POST'])
@@ -222,7 +222,7 @@ def login():
 
     if not username or not password:
         flash("Inserisci username e password.", "error")
-        return render_template('auth.html', current_year=session.get('year'))
+        return render_template('login.html', current_year=session.get('year'))
 
     db = get_users_db()
     user = db.execute(
@@ -233,11 +233,11 @@ def login():
 
     if not user or not check_password_hash(user[2], password):
         flash("Username o password errati.", "error")
-        return render_template('auth.html', current_year=session.get('year'))
+        return render_template('login.html', current_year=session.get('year'))
 
     if user[5]:
         flash("Account bloccato. Contatta un amministratore.", "error")
-        return render_template('auth.html', current_year=session.get('year'))
+        return render_template('login.html', current_year=session.get('year'))
 
     session['user_id'] = user[0]
     session['username'] = user[1]
@@ -247,18 +247,21 @@ def login():
     return redirect(url_for('add_expense'))
 
 
-@app.route('/signup', methods=['POST'])
+@app.route('/signup', methods=['GET', 'POST'])
 def signup():
+    if request.method == 'GET':
+        return render_template('signup.html', current_year=session.get('year'))
+
     username = request.form.get('username', '').strip()
     password = request.form.get('password', '')
 
     if not username or not password:
         flash("Inserisci username e password.", "error")
-        return render_template('auth.html', current_year=session.get('year'))
+        return render_template('signup.html', current_year=session.get('year'))
 
     if not username.isalnum():
         flash("Lo username può contenere solo lettere e numeri.", "error")
-        return render_template('auth.html', current_year=session.get('year'))
+        return render_template('signup.html', current_year=session.get('year'))
 
     user_db_path = os.path.join(USER_DB_DIR, f"{username}.db")
     db_users = get_users_db()
@@ -269,7 +272,7 @@ def signup():
     if existing or os.path.exists(user_db_path):
         db_users.close()
         flash("Username già esistente.", "error")
-        return render_template('auth.html', current_year=session.get('year'))
+        return render_template('signup.html', current_year=session.get('year'))
 
     os.makedirs(USER_DB_DIR, exist_ok=True)
     new_db = SQLManager(user_db_path)
