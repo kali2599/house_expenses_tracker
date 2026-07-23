@@ -1,10 +1,10 @@
 from flask import Flask, render_template, request, session, redirect, url_for, flash, send_from_directory
 from datetime import datetime
-import os, functools, sqlite3, secrets, string, uuid
+import os, functools, sqlite3, secrets, string, uuid, json
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from settings import *
-from sqlManager import SQLManager
+from sqlManager import SQLManager, generate_user_db_sql
 from utils import parse_date_bound, get_color_for_attribute
 from init import init_app
 
@@ -35,9 +35,9 @@ else:
 app.jinja_env.globals.update(zip=zip)
 app.jinja_env.globals.update(get_color_for_attribute=get_color_for_attribute)
 app.jinja_env.globals.update(MONTHS_INDEX=MONTHS_INDEX)
-app.jinja_env.globals.update(SQL_ATTRIBUTES_ALL=SQL_ATTRIBUTES_ALL)
-app.jinja_env.globals.update(SQL_ATTRIBUTES_EDITABLE=SQL_ATTRIBUTES_EDITABLE)
 app.jinja_env.globals.update(SESSION=session)
+app.jinja_env.globals.update(DEFAULT_VARIABILI=DEFAULT_VARIABILI)
+app.jinja_env.globals.update(DEFAULT_FISSE=DEFAULT_FISSE)
 
 
 # ─── Context processor ───
@@ -162,6 +162,10 @@ def ensure_month(sm, month):
     if not sm.check_month_exists(month):
         sm.add_month_entry(month)
 
+def get_user_attributes(sm):
+    """Get user's attribute lists from their DB."""
+    return sm.get_user_attributes()
+
 
 # ─── Before request ───
 
@@ -228,32 +232,19 @@ def signup():
         flash("Lo username può contenere solo lettere e numeri.", "error")
         return render_template('signup.html', current_year=session.get('year'))
 
-    user_db_path = os.path.join(USER_DB_DIR, f"{username}.db")
     db_users = get_users_db()
-
     existing = db_users.execute(
         "SELECT id FROM users WHERE username = ?", (username,)
     ).fetchone()
-    if existing or os.path.exists(user_db_path):
+    if existing:
         db_users.close()
         flash("Username già esistente.", "error")
         return render_template('signup.html', current_year=session.get('year'))
 
-    os.makedirs(USER_DB_DIR, exist_ok=True)
-    new_db = SQLManager(user_db_path)
-    init_sql = open('init.sql').read()
-    new_db.cursor.executescript(init_sql)
-
-    year = session.get('year', datetime.now().year)
-    for m in range(1, 13):
-        month_key = f"{year}_{MONTHS_INDEX[m]}"
-        new_db.add_month_entry(month_key)
-    new_db.close()
-
     password_hash = generate_password_hash(password)
     db_users.execute(
         "INSERT INTO users (username, password_hash, db_path, role) VALUES (?, ?, ?, 'basic')",
-        (username, password_hash, user_db_path)
+        (username, password_hash, 'pending')
     )
     db_users.commit()
     user_id = db_users.execute(
@@ -261,10 +252,101 @@ def signup():
     ).fetchone()[0]
     db_users.close()
 
+    session['signup_user_id'] = user_id
+    session['signup_username'] = username
+    session['signup_password'] = password
+    return redirect(url_for('signup_configure'))
+
+
+@app.route('/signup/configure', methods=['GET', 'POST'])
+def signup_configure():
+    user_id = session.get('signup_user_id')
+    username = session.get('signup_username')
+    if not user_id or not username:
+        flash("Sessione di registrazione scaduta. Riprova.", "error")
+        return redirect(url_for('signup'))
+
+    if request.method == 'GET':
+        return render_template('signup_configure.html',
+            default_variabili=DEFAULT_VARIABILI,
+            default_fisse=DEFAULT_FISSE,
+            current_year=session.get('year'))
+
+    variabili_raw = request.form.getlist('variabili')
+    fisse_raw = request.form.getlist('fisse')
+
+    variabili = [v.strip() for v in variabili_raw if v.strip()]
+    fisse = [f.strip() for f in fisse_raw if f.strip()]
+
+    if not variabili:
+        flash("Devi avere almeno un attributo variabile.", "error")
+        return render_template('signup_configure.html',
+            default_variabili=DEFAULT_VARIABILI, default_fisse=DEFAULT_FISSE,
+            selected_variabili=variabili_raw, selected_fisse=fisse_raw,
+            current_year=session.get('year'))
+
+    if not fisse:
+        flash("Devi avere almeno un attributo fisso.", "error")
+        return render_template('signup_configure.html',
+            default_variabili=DEFAULT_VARIABILI, default_fisse=DEFAULT_FISSE,
+            selected_variabili=variabili_raw, selected_fisse=fisse_raw,
+            current_year=session.get('year'))
+
+    all_names = variabili + fisse
+    if len(all_names) != len(set(all_names)):
+        flash("Nomi attributi duplicati.", "error")
+        return render_template('signup_configure.html',
+            default_variabili=DEFAULT_VARIABILI, default_fisse=DEFAULT_FISSE,
+            selected_variabili=variabili_raw, selected_fisse=fisse_raw,
+            current_year=session.get('year'))
+
+    invalid_chars = set(' ,;\'"()[]{}|\\/<>&=%#?!@`~')
+    for name in variabili + fisse:
+        if not name.isalnum() and not all(c not in invalid_chars for c in name):
+            flash(f"Nome attributo '{name}' contiene caratteri non validi. Usa solo lettere e numeri.", "error")
+            return render_template('signup_configure.html',
+                default_variabili=DEFAULT_VARIABILI, default_fisse=DEFAULT_FISSE,
+                selected_variabili=variabili_raw, selected_fisse=fisse_raw,
+                current_year=session.get('year'))
+
+    user_db_path = os.path.join(USER_DB_DIR, f"{username}.db")
+    os.makedirs(USER_DB_DIR, exist_ok=True)
+
+    db_users = get_users_db()
+    db_users.execute(
+        "UPDATE users SET db_path = ?, custom_variabili = ?, custom_fisse = ? WHERE id = ?",
+        (user_db_path, json.dumps(variabili), json.dumps(fisse), user_id)
+    )
+    db_users.commit()
+    db_users.close()
+
+    sql = generate_user_db_sql(variabili, fisse)
+    new_db = SQLManager(user_db_path)
+    new_db.cursor.executescript(sql)
+
+    year = session.get('year', datetime.now().year)
+    for m in range(1, 13):
+        month_key = f"{year}_{MONTHS_INDEX[m]}"
+        new_db.add_month_entry(month_key)
+    new_db.close()
+
+    password = session.get('signup_password', '')
+    password_hash = generate_password_hash(password)
+    db_users = get_users_db()
+    db_users.execute(
+        "UPDATE users SET password_hash = ? WHERE id = ?",
+        (password_hash, user_id)
+    )
+    db_users.commit()
+    db_users.close()
+
     session['user_id'] = user_id
     session['username'] = username
     session['db_path'] = user_db_path
     session['role'] = 'basic'
+    session.pop('signup_user_id', None)
+    session.pop('signup_username', None)
+    session.pop('signup_password', None)
     flash(f"Account creato! Benvenuto, {username}!", "success")
     return redirect(url_for('add_expense'))
 
@@ -864,9 +946,11 @@ def add_expense():
         if action == 'select_month':
             ensure_month(sm, month)
             data = sm.get_data_by_month(month)
+            attrs = get_user_attributes(sm)
             return render_template('add_expense.html', month=month,
                 month_name=month_name, month_num=month_num, data_row=data,
                 visible_users=visible_users, target_user=target_user,
+                user_columns=attrs['all'], user_editable=attrs['editable'],
                 current_year=year)
 
         if action == 'add':
@@ -909,9 +993,11 @@ def add_expense():
 
     ensure_month(sm, month)
     data = sm.get_data_by_month(month)
+    attrs = get_user_attributes(sm)
     return render_template('add_expense.html', month=month,
         month_name=month_name, month_num=month_num, data_row=data,
         visible_users=visible_users, target_user=target_user,
+        user_columns=attrs['all'], user_editable=attrs['editable'],
         current_year=year)
 
 
@@ -947,9 +1033,10 @@ def data_analysis_comparison():
 
     months_data = sm.get_months_data(selected)
     sorted_months = [m for m in all_sorted if m in selected]
+    user_columns = sm.get_column_names()
 
     rows = []
-    for attr_idx, attr in enumerate(SQL_ATTRIBUTES_ALL):
+    for attr_idx, attr in enumerate(user_columns):
         if attr == 'mese':
             continue
         values = []
@@ -975,11 +1062,13 @@ def data_analysis_comparison():
         month_labels.append(f"{mn.capitalize()} {y}")
         month_short_labels.append(mn[:3].capitalize())
 
+    attrs = get_user_attributes(sm)
     return render_template('comparison.html', months=all_sorted,
         selected=selected, sorted_months=sorted_months,
         rows=rows, month_labels=month_labels,
         month_short_labels=month_short_labels,
         visible_users=visible_users, target_user=target_user,
+        user_variabili=attrs['variabili'], user_fisse=attrs['fisse'],
         active_view='comparison', current_year=year)
 
 
@@ -1002,10 +1091,11 @@ def data_analysis_tracking():
     all_sorted = sm.get_months_list(year)
 
     all_months_data = sm.get_months_data(all_sorted)
-    trackable_attrs = [a for a in SQL_ATTRIBUTES_ALL if a != 'mese']
+    user_columns = sm.get_column_names()
+    trackable_attrs = [a for a in user_columns if a != 'mese']
     tracking_data = {}
     for attr in trackable_attrs:
-        attr_idx = SQL_ATTRIBUTES_ALL.index(attr)
+        attr_idx = user_columns.index(attr)
         values = []
         for m in all_sorted:
             row = all_months_data.get(m)

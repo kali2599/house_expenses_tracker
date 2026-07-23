@@ -8,8 +8,28 @@ class SQLManager:
 
 
     def _validate_attribute(self, attribute):
-        if attribute not in settings.SQL_ATTRIBUTES_ALL:
+        columns = self.get_column_names()
+        if attribute not in columns:
             raise ValueError(f"Invalid column name: {attribute}")
+
+
+    def get_column_names(self):
+        """Return actual column names from spese_mensili table."""
+        return [col[1] for col in self.cursor.execute("PRAGMA table_info(spese_mensili)").fetchall()]
+
+
+    def get_user_attributes(self):
+        """Return user's attribute classification."""
+        columns = self.get_column_names()
+        system = settings.SQL_SYSTEM_COLUMNS
+        variabili = [c for c in columns if c not in system and c not in ('uscite_variabili', 'uscite_fisse')]
+        editable = ['entrate'] + [c for c in columns if c not in system]
+        return {
+            'all': columns,
+            'editable': editable,
+            'variabili': [c for c in columns if c not in system and c not in settings.DEFAULT_FISSE and c != 'uscite_variabili' and c != 'uscite_fisse' and c != 'uscite_totali' and c != 'delta' and c != 'entrate'],
+            'fisse': [c for c in columns if c not in system and c not in settings.DEFAULT_VARIABILI and c not in ('entrate', 'uscite_variabili', 'uscite_fisse', 'uscite_totali', 'delta')],
+        }
 
 
     def get_data_by_month(self, month):
@@ -159,4 +179,72 @@ class SQLManager:
         return None
 
 
+def generate_user_db_sql(variabili, fisse):
+    """Generate SQL to create a user's spese_mensili table with custom columns and triggers."""
+    variabili_cols = ', '.join([f'"{v}" REAL' for v in variabili])
+    fisse_cols = ', '.join([f'"{f}" REAL' for f in fisse])
 
+    variabili_update = ' + '.join([f'(new."{v}" - old."{v}")' for v in variabili])
+    fisse_update = ' + '.join([f'(new."{f}" - old."{f}")' for f in fisse])
+
+    variabili_trigger_cols = ', '.join(variabili)
+    fisse_trigger_cols = ', '.join(fisse)
+
+    sql = f"""
+CREATE TABLE registro_spese (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
+    categoria TEXT,
+    nota TEXT,
+    importo REAL,
+    data TEXT
+);
+
+CREATE TABLE spese_mensili (
+    mese TEXT PRIMARY KEY,
+    entrate REAL,
+    {variabili_cols},
+    uscite_variabili REAL,
+    {fisse_cols},
+    uscite_fisse REAL,
+    uscite_totali REAL,
+    delta REAL
+);
+
+CREATE TRIGGER update_uscite_variabili AFTER UPDATE OF {variabili_trigger_cols}
+ON spese_mensili
+FOR EACH ROW
+BEGIN
+UPDATE spese_mensili
+SET uscite_variabili = ROUND(uscite_variabili + {variabili_update}, 1)
+WHERE mese = old.mese;
+END;
+
+CREATE TRIGGER update_uscite_fisse AFTER UPDATE OF {fisse_trigger_cols}
+ON spese_mensili
+FOR EACH ROW
+BEGIN
+UPDATE spese_mensili
+SET uscite_fisse = ROUND(uscite_fisse + {fisse_update}, 1)
+WHERE mese = old.mese;
+END;
+
+CREATE TRIGGER update_uscite_totali AFTER UPDATE OF uscite_variabili, uscite_fisse
+ON spese_mensili
+FOR EACH ROW
+BEGIN
+UPDATE spese_mensili
+SET uscite_totali = ROUND(uscite_totali + (new.uscite_variabili - old.uscite_variabili) + (new.uscite_fisse - old.uscite_fisse), 1)
+WHERE mese = old.mese;
+END;
+
+CREATE TRIGGER update_delta AFTER UPDATE OF uscite_totali, entrate
+ON spese_mensili
+FOR EACH ROW
+BEGIN
+UPDATE spese_mensili
+SET delta = ROUND(entrate - uscite_totali, 1)
+WHERE mese = old.mese;
+END;
+"""
+    return sql

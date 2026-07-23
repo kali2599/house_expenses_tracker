@@ -27,7 +27,7 @@
           </tr>
         </thead>
         <tbody>
-        {% for attr, value in zip(SQL_ATTRIBUTES_ALL, data_row) %}
+        {% for attr, value in zip(user_columns, data_row) %}
         {% if attr != 'mese' %}
         <tr class="{{ get_color_for_attribute(attr, value) }}">
           <td>{{ attr }}</td>
@@ -69,7 +69,7 @@
               <div class="field-group">
                 <label>Attributo:</label>
                 <select name="attribute[]">
-                  {% for attr in SQL_ATTRIBUTES_EDITABLE %}
+                  {% for attr in user_editable %}
                   <option value="{{ attr }}">{{ attr }}</option>
                   {% endfor %}
                 </select>

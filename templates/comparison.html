@@ -131,7 +131,7 @@
       {% for attr, values, mean, pct in rows %}
       <label>
         <input type="checkbox" data-attr="{{ attr }}"
-          {% if attr in ('spesa','svago','varie','pasti_fuori','inaspettate','uscite_variabili') %}checked{% endif %}
+          {% if attr in user_variabili or attr == 'uscite_variabili' %}checked{% endif %}
           onchange="updateTrend()"> {{ attr }}
       </label>
       {% endfor %}
@@ -206,8 +206,8 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script>
-var VARIABILI = ['spesa','pasti_fuori','svago','shopping','inaspettate','varie','salute','vacanze'];
-var FISSE = ['abbonamenti','investimenti','assicurazioni','condominio','luce','gas','mutuo','lenti','telefonia','parrucchiere','palestra'];
+var VARIABILI = {{ user_variabili|tojson }};
+var FISSE = {{ user_fisse|tojson }};
 var COMPUTED = ['uscite_variabili','uscite_fisse','uscite_totali','delta'];
 
 var MONTH_LABELS = {{ month_labels|tojson }};

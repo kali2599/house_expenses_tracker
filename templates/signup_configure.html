@@ -1,0 +1,65 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2>Configura il tuo database</h2>
+<p style="color:#475569;margin-bottom:16px">Scegli gli attributi per la tua tabella spese mensili. Puoi rinominare, aggiungere o rimuovere categorie.</p>
+
+<form method="post" action="/signup/configure">
+  <div class="card">
+    <h3 style="margin:0 0 6px">Spese Variabile</h3>
+    <p style="font-size:0.85em;color:#64748b;margin:0 0 10px">Spese che variano mese per mese. Verranno sommati in <strong>uscite_variabili</strong>.</p>
+    <div id="variabili-list">
+      {% for v in (selected_variabili if selected_variabili else default_variabili) %}
+      <div class="attr-row">
+        <input type="text" name="variabili" value="{{ v }}" class="attr-input" required>
+        <button type="button" class="remove-attr-btn" onclick="removeAttr(this)">✕</button>
+      </div>
+      {% endfor %}
+    </div>
+    <button type="button" onclick="addAttr('variabili-list')" class="add-attr-btn">+ Aggiungi variabile</button>
+  </div>
+
+  <div class="card">
+    <h3 style="margin:0 0 6px">Spese Fissa</h3>
+    <p style="font-size:0.85em;color:#64748b;margin:0 0 10px">Spese fisse mensili. Verranno sommati in <strong>uscite_fisse</strong>.</p>
+    <div id="fisse-list">
+      {% for f in (selected_fisse if selected_fisse else default_fisse) %}
+      <div class="attr-row">
+        <input type="text" name="fisse" value="{{ f }}" class="attr-input" required>
+        <button type="button" class="remove-attr-btn" onclick="removeAttr(this)">✕</button>
+      </div>
+      {% endfor %}
+    </div>
+    <button type="button" onclick="addAttr('fisse-list')" class="add-attr-btn">+ Aggiungi fisso</button>
+  </div>
+
+  <div class="card" style="background:#f0f7ff;border:1px solid #bfdbfe">
+    <h3 style="margin:0 0 8px">Attributi di sistema (non modificabili)</h3>
+    <div style="display:flex;flex-wrap:wrap;gap:6px">
+      <span class="system-attr">entrate</span>
+      <span class="system-attr">uscite_variabili</span>
+      <span class="system-attr">uscite_fisse</span>
+      <span class="system-attr">uscite_totali</span>
+      <span class="system-attr">delta</span>
+    </div>
+  </div>
+
+  <button type="submit" style="margin-top:16px;font-size:1em;padding:12px 24px">Crea database</button>
+</form>
+
+<script>
+function addAttr(listId) {
+  var list = document.getElementById(listId);
+  var div = document.createElement('div');
+  div.className = 'attr-row';
+  div.innerHTML = '<input type="text" name="' + (listId === 'variabili-list' ? 'variabili' : 'fisse') + '" class="attr-input" required placeholder="nome_attributo"><button type="button" class="remove-attr-btn" onclick="removeAttr(this)">✕</button>';
+  list.appendChild(div);
+  div.querySelector('input').focus();
+}
+function removeAttr(btn) {
+  var list = btn.closest('.attr-row').parentElement;
+  if (list.children.length > 1) {
+    btn.closest('.attr-row').remove();
+  }
+}
+</script>
+{% endblock %}
