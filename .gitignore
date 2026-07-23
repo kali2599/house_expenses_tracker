@@ -5,5 +5,5 @@ database_path
 test.sh
 venv/
 flask_secret.key
-users.db
-user_data/
+data/users.db
+data/user_data/

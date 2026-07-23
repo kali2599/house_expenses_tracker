@@ -20,12 +20,26 @@
     </div>
   </div>
   <a href="/undo-expense">Undo Expense</a>
+  {% if session.role == 'super_admin' %}
+  <div class="nav-dropdown">
+    <span class="nav-dropdown-trigger">Amministrazione ▾</span>
+    <div class="nav-dropdown-content">
+      <a href="/admin/users">Utenti</a>
+      <a href="/admin/groups">Gruppi</a>
+    </div>
+  </div>
+  {% elif session.role == 'admin' %}
+  <a href="/admin/groups">Gruppi</a>
+  {% endif %}
+  {% if pending_invites_count > 0 %}
+  <a href="/invitations" style="color:#f59e0b;font-weight:600">Inviti ({{ pending_invites_count }})</a>
+  {% endif %}
   <span class="nav-year">
     Year: {{ current_year }}
     <a href="/change-year" class="small-link">[change]</a>
   </span>
   <span class="nav-user">
-    {{ session.username }} <a href="/logout" class="small-link">[logout]</a>
+    <a href="/profile" style="color:#94a3b8">{{ session.username }}</a> <a href="/logout" class="small-link">[logout]</a>
   </span>
   {% endif %}
 </div>

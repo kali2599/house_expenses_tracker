@@ -1,0 +1,30 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2>Inviti in sospeso</h2>
+
+{% if invites %}
+{% for member_id, group_name, inviter in invites %}
+<div class="card" style="display:flex;align-items:center;justify-content:space-between">
+  <div>
+    <strong>{{ inviter }}</strong> ti ha invitato al gruppo <strong>{{ group_name }}</strong>
+  </div>
+  <div style="display:flex;gap:8px">
+    <form method="post">
+      <input type="hidden" name="action" value="accept">
+      <input type="hidden" name="member_id" value="{{ member_id }}">
+      <button type="submit" style="padding:5px 14px;font-size:0.88em">Accetta</button>
+    </form>
+    <form method="post">
+      <input type="hidden" name="action" value="decline">
+      <input type="hidden" name="member_id" value="{{ member_id }}">
+      <button type="submit" class="danger" style="padding:5px 14px;font-size:0.88em">Rifiuta</button>
+    </form>
+  </div>
+</div>
+{% endfor %}
+{% else %}
+<div class="card">
+  <p>Nessun invito in sospeso.</p>
+</div>
+{% endif %}
+{% endblock %}

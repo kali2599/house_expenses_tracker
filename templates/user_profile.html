@@ -1,0 +1,34 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2>Profilo utente</h2>
+
+<div class="card">
+  <div style="display:grid;grid-template-columns:160px 1fr;gap:10px;font-size:0.95em">
+    <div style="font-weight:600;color:#64748b">Username</div>
+    <div>{{ user_info[1] }}</div>
+
+    <div style="font-weight:600;color:#64748b">Ruolo</div>
+    <div>
+      {% if user_info[4] == 'super_admin' %}
+        <span style="color:#7c3aed;font-weight:600">Super Admin</span>
+      {% elif user_info[4] == 'admin' %}
+        <span style="color:#2563eb;font-weight:600">Admin</span>
+      {% else %}
+        <span>Basic</span>
+      {% endif %}
+    </div>
+
+    <div style="font-weight:600;color:#64748b">Stato</div>
+    <div>
+      {% if user_info[5] %}
+        <span style="color:#dc2626">Bloccato</span>
+      {% else %}
+        <span style="color:#059669">Attivo</span>
+      {% endif %}
+    </div>
+
+    <div style="font-weight:600;color:#64748b">Account creato il</div>
+    <div>{{ user_info[6] }}</div>
+  </div>
+</div>
+{% endblock %}

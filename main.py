@@ -6,52 +6,17 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from settings import *
 from sqlManager import SQLManager
 from utils import parse_date_bound, get_color_for_attribute
+from init import init_app
+
+
+# --- Initialize the application
+init_app()
 
 
 # ─── Users DB ───
 
 def get_users_db():
     return sqlite3.connect(USERS_DB)
-
-def init_users_db():
-    os.makedirs(USER_DB_DIR, exist_ok=True)
-    db = get_users_db()
-    db.execute("""CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT UNIQUE NOT NULL,
-        password_hash TEXT NOT NULL,
-        db_path TEXT NOT NULL,
-        role TEXT NOT NULL DEFAULT 'basic',
-        blocked INTEGER NOT NULL DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )""")
-    for col in ["role TEXT NOT NULL DEFAULT 'basic'", "blocked INTEGER NOT NULL DEFAULT 0"]:
-        try:
-            db.execute(f"ALTER TABLE users ADD COLUMN {col}")
-        except sqlite3.OperationalError:
-            pass
-    db.executescript("""
-        CREATE TABLE IF NOT EXISTS groups (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE NOT NULL,
-            created_by INTEGER NOT NULL REFERENCES users(id),
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        CREATE TABLE IF NOT EXISTS group_members (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            group_id INTEGER NOT NULL REFERENCES groups(id),
-            user_id INTEGER NOT NULL REFERENCES users(id),
-            invited_by INTEGER NOT NULL REFERENCES users(id),
-            status TEXT NOT NULL DEFAULT 'pending',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(group_id, user_id)
-        );
-    """)
-    db.execute("UPDATE users SET role = 'basic' WHERE role IS NULL")
-    db.commit()
-    db.close()
-
-init_users_db()
 
 
 # ─── App setup ───
@@ -401,9 +366,10 @@ def admin_groups():
 
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
+        description = request.form.get('description', '').strip()
         if name:
             try:
-                db.execute("INSERT INTO groups (name, created_by) VALUES (?, ?)", (name, user_id))
+                db.execute("INSERT INTO groups (name, description, created_by) VALUES (?, ?, ?)", (name, description, user_id))
                 db.commit()
                 flash(f"Gruppo '{name}' creato.", "success")
             except sqlite3.IntegrityError:
@@ -413,11 +379,11 @@ def admin_groups():
 
     if role == 'super_admin':
         groups = db.execute(
-            "SELECT g.id, g.name, u.username, g.created_at FROM groups g JOIN users u ON u.id = g.created_by ORDER BY g.created_at"
+            "SELECT g.id, g.name, g.description, u.username, g.created_at FROM groups g JOIN users u ON u.id = g.created_by ORDER BY g.created_at"
         ).fetchall()
     else:
         groups = db.execute(
-            "SELECT g.id, g.name, u.username, g.created_at FROM groups g JOIN users u ON u.id = g.created_by WHERE g.created_by = ? ORDER BY g.created_at",
+            "SELECT g.id, g.name, g.description, u.username, g.created_at FROM groups g JOIN users u ON u.id = g.created_by WHERE g.created_by = ? ORDER BY g.created_at",
             (user_id,)
         ).fetchall()
     db.close()
@@ -433,14 +399,14 @@ def admin_group_detail(gid):
     db = get_users_db()
 
     group = db.execute(
-        "SELECT g.id, g.name, g.created_by FROM groups g WHERE g.id = ?", (gid,)
+        "SELECT g.id, g.name, g.description, g.created_by FROM groups g WHERE g.id = ?", (gid,)
     ).fetchone()
     if not group:
         db.close()
         flash("Gruppo non trovato.", "error")
         return redirect(url_for('admin_groups'))
 
-    if role != 'super_admin' and group[2] != user_id:
+    if role != 'super_admin' and group[3] != user_id:
         db.close()
         flash("Accesso negato.", "error")
         return redirect(url_for('admin_groups'))
@@ -493,8 +459,8 @@ def admin_group_detail(gid):
     """, (gid,)).fetchall()
 
     candidates = db.execute(
-        "SELECT username FROM users WHERE role = 'basic' AND id NOT IN (SELECT user_id FROM group_members WHERE group_id = ?) AND id != ? ORDER BY username",
-        (gid, group[2])
+        "SELECT username FROM users WHERE id NOT IN (SELECT user_id FROM group_members WHERE group_id = ?) AND id != ? ORDER BY username",
+        (gid, group[3])
     ).fetchall()
     db.close()
 
@@ -536,6 +502,33 @@ def invitations():
     db.close()
 
     return render_template('invitations.html', invites=invites, current_year=session.get('year'))
+
+
+# ─── Profile ───
+
+@app.route('/profile')
+@app.route('/profile/<username>')
+@login_required
+def profile(username=None):
+    if username is None:
+        username = session['username']
+
+    if username != session['username'] and session.get('role') != 'super_admin':
+        flash("Accesso negato.", "error")
+        return redirect(url_for('profile'))
+
+    db = get_users_db()
+    user_info = db.execute(
+        "SELECT id, username, password_hash, db_path, role, blocked, created_at FROM users WHERE username = ?",
+        (username,)
+    ).fetchone()
+    db.close()
+
+    if not user_info:
+        flash("Utente non trovato.", "error")
+        return redirect(url_for('add_expense'))
+
+    return render_template('user_profile.html', user_info=user_info, current_year=session.get('year'))
 
 
 # ─── Add Expense ───

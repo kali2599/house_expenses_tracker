@@ -1,0 +1,87 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2>Gruppo: {{ group[1] }}</h2>
+<p><a href="/admin/groups">← Torna ai gruppi</a></p>
+
+{% if group[2] %}
+<div class="card">
+  <p style="color:#475569;margin:0">{{ group[2] }}</p>
+</div>
+{% endif %}
+
+<div class="card">
+  <h3>Membri</h3>
+  {% if members %}
+  <table>
+    <thead>
+      <tr>
+        <th>Username</th>
+        <th>Stato</th>
+        <th>Azioni</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for gm_id, uid, uname, status in members %}
+      <tr>
+        <td>{{ uname }}</td>
+        <td>
+          {% if status == 'accepted' %}
+            <span style="color:#059669">Accettato</span>
+          {% elif status == 'pending' %}
+            <span style="color:#f59e0b">In attesa</span>
+          {% elif status == 'blocked' %}
+            <span style="color:#dc2626">Bloccato</span>
+          {% elif status == 'declined' %}
+            <span style="color:#6b7280">Rifiutato</span>
+          {% endif %}
+        </td>
+        <td style="white-space:nowrap">
+          {% if status != 'blocked' %}
+          <form method="post" style="display:inline">
+            <input type="hidden" name="action" value="block">
+            <input type="hidden" name="member_id" value="{{ gm_id }}">
+            <button type="submit" style="padding:3px 8px;font-size:0.82em;background:#f59e0b">Blocca</button>
+          </form>
+          {% endif %}
+          {% if status == 'blocked' %}
+          <form method="post" style="display:inline">
+            <input type="hidden" name="action" value="unblock">
+            <input type="hidden" name="member_id" value="{{ gm_id }}">
+            <button type="submit" style="padding:3px 8px;font-size:0.82em">Sblocca</button>
+          </form>
+          {% endif %}
+          <form method="post" style="display:inline" onsubmit="return confirm('Rimuovere questo membro?')">
+            <input type="hidden" name="action" value="remove_member">
+            <input type="hidden" name="member_id" value="{{ gm_id }}">
+            <button type="submit" class="danger" style="padding:3px 8px;font-size:0.82em">Rimuovi</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>Nessun membro nel gruppo.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h3>Invita utente</h3>
+  {% if candidates %}
+  <form method="post" style="display:flex;gap:8px;align-items:end">
+    <input type="hidden" name="action" value="invite">
+    <div>
+      <label>Seleziona utente</label>
+      <select name="username">
+        {% for c in candidates %}
+        <option value="{{ c[0] }}">{{ c[0] }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit">Invita</button>
+  </form>
+  {% else %}
+  <p>Nessun utente disponibile da invitare.</p>
+  {% endif %}
+</div>
+{% endblock %}

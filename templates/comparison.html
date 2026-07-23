@@ -1,6 +1,19 @@
 {% extends "layout.html" %}
 {% block content %}
 
+{% if visible_users|length > 1 %}
+<div class="card" style="margin-bottom:16px">
+  <form method="get" style="display:flex;gap:8px;align-items:center">
+    <label style="margin:0;font-weight:600">Visualizza dati di:</label>
+    <select name="target_user" onchange="this.form.submit()">
+      {% for u in visible_users %}
+      <option value="{{ u }}" {% if u == target_user %}selected{% endif %}>{{ u }}</option>
+      {% endfor %}
+    </select>
+  </form>
+</div>
+{% endif %}
+
 <details class="section-collapsible" open>
   <summary>Confronta Mesi</summary>
   <form method="post" id="compare-form" class="selector-form">

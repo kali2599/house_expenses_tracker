@@ -1,0 +1,58 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2>Gestione Utenti</h2>
+<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>Username</th>
+        <th>Ruolo</th>
+        <th>Stato</th>
+        <th>Creato il</th>
+        <th>Azioni</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for uid, username, role, blocked, created_at in users %}
+      <tr>
+        <td><a href="/profile/{{ username }}">{{ username }}</a></td>
+        <td>
+          {% if role == 'super_admin' %}
+            <span style="color:#7c3aed;font-weight:600">Super Admin</span>
+          {% elif role == 'admin' %}
+            <span style="color:#2563eb;font-weight:600">Admin</span>
+          {% else %}
+            <span>Basic</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if blocked %}
+            <span style="color:#dc2626">Bloccato</span>
+          {% else %}
+            <span style="color:#059669">Attivo</span>
+          {% endif %}
+        </td>
+        <td>{{ created_at }}</td>
+        <td style="white-space:nowrap">
+          {% if role == 'basic' and uid != session.user_id %}
+          <form method="post" action="/admin/users/{{ uid }}/promote" style="display:inline">
+            <button type="submit" style="padding:4px 10px;font-size:0.82em">Promuovi</button>
+          </form>
+          {% endif %}
+          {% if role == 'admin' %}
+          <form method="post" action="/admin/users/{{ uid }}/demote" style="display:inline">
+            <button type="submit" style="padding:4px 10px;font-size:0.82em;background:#f59e0b">Declassa</button>
+          </form>
+          {% endif %}
+          {% if role != 'super_admin' and uid != session.user_id %}
+          <form method="post" action="/admin/users/{{ uid }}/remove" style="display:inline" onsubmit="return confirm('Rimuovere questo utente?')">
+            <button type="submit" class="danger" style="padding:4px 10px;font-size:0.82em">Rimuovi</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
