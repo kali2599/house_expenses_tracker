@@ -10,12 +10,13 @@ Usage:
 """
 
 import os, sqlite3
-from settings import USER_DB_DIR, USERS_DB
+from settings import USER_DB_DIR, USERS_DB, DATA_DIR
 
 
 def init_app():
     """Initialize all required directories and database tables."""
     os.makedirs(USER_DB_DIR, exist_ok=True)
+    os.makedirs(os.path.join(DATA_DIR, 'uploads', 'profiles'), exist_ok=True)
 
     db = sqlite3.connect(USERS_DB)
 
@@ -28,7 +29,11 @@ def init_app():
         blocked INTEGER NOT NULL DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )""")
-    for col in ["role TEXT NOT NULL DEFAULT 'basic'", "blocked INTEGER NOT NULL DEFAULT 0"]:
+    for col in ["role TEXT NOT NULL DEFAULT 'basic'", "blocked INTEGER NOT NULL DEFAULT 0",
+                 "first_name TEXT DEFAULT ''", "last_name TEXT DEFAULT ''",
+                 "date_of_birth TEXT DEFAULT ''", "bio TEXT DEFAULT ''",
+                 "profile_photo TEXT DEFAULT ''", "security_question TEXT DEFAULT ''",
+                 "security_answer_hash TEXT DEFAULT ''"]:
         try:
             db.execute(f"ALTER TABLE users ADD COLUMN {col}")
         except sqlite3.OperationalError:
@@ -54,6 +59,10 @@ def init_app():
     """)
     try:
         db.execute("ALTER TABLE groups ADD COLUMN description TEXT DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute("ALTER TABLE groups ADD COLUMN blocked INTEGER DEFAULT 0")
     except sqlite3.OperationalError:
         pass
 

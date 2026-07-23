@@ -49,6 +49,11 @@
             <button type="submit" class="danger" style="padding:4px 10px;font-size:0.82em">Rimuovi</button>
           </form>
           {% endif %}
+          {% if uid != session.user_id %}
+          <form method="post" action="/admin/users/{{ uid }}/reset-password" style="display:inline" onsubmit="return confirm('Generare una password temporanea per questo utente?')">
+            <button type="submit" style="padding:4px 10px;font-size:0.82em;background:#7c3aed">Reset PW</button>
+          </form>
+          {% endif %}
         </td>
       </tr>
       {% endfor %}

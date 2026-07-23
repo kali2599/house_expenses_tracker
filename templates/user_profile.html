@@ -2,33 +2,162 @@
 {% block content %}
 <h2>Profilo utente</h2>
 
-<div class="card">
-  <div style="display:grid;grid-template-columns:160px 1fr;gap:10px;font-size:0.95em">
-    <div style="font-weight:600;color:#64748b">Username</div>
-    <div>{{ user_info[1] }}</div>
-
-    <div style="font-weight:600;color:#64748b">Ruolo</div>
-    <div>
-      {% if user_info[4] == 'super_admin' %}
-        <span style="color:#7c3aed;font-weight:600">Super Admin</span>
-      {% elif user_info[4] == 'admin' %}
-        <span style="color:#2563eb;font-weight:600">Admin</span>
+<div class="profile-layout">
+  <div class="profile-sidebar">
+    <div class="card" style="text-align:center">
+      {% if user_info[11] %}
+        <img src="/uploads/profiles/{{ user_info[11] }}" class="profile-photo">
       {% else %}
-        <span>Basic</span>
+        <div class="profile-avatar">
+          {{ (user_info[7] or user_info[1])[0]|upper }}
+        </div>
       {% endif %}
+      <div style="margin-top:12px">
+        <div style="font-weight:700;font-size:1.1em">{{ user_info[1] }}</div>
+        {% if user_info[7] or user_info[8] %}
+          <div style="color:#64748b;font-size:0.9em;margin-top:2px">
+            {{ user_info[7] or '' }} {{ user_info[8] or '' }}
+          </div>
+        {% endif %}
+      </div>
+      <div style="margin-top:8px">
+        {% if user_info[4] == 'super_admin' %}
+          <span class="role-badge role-superadmin">Super Admin</span>
+        {% elif user_info[4] == 'admin' %}
+          <span class="role-badge role-admin">Admin</span>
+        {% else %}
+          <span class="role-badge role-basic">Basic</span>
+        {% endif %}
+      </div>
+      {% if user_info[9] %}
+        <div style="margin-top:6px;font-size:0.85em;color:#64748b">
+          Nato il {{ user_info[9] }}
+        </div>
+      {% endif %}
+      {% if user_info[10] %}
+        <div style="margin-top:10px;font-size:0.88em;color:#475569;text-align:left;padding:0 10px">
+          <em>"{{ user_info[10] }}"</em>
+        </div>
+      {% endif %}
+      <div style="margin-top:12px;font-size:0.82em;color:#94a3b8">
+        {% if user_info[5] %}
+          <span style="color:#dc2626">Bloccato</span>
+        {% else %}
+          <span style="color:#059669">Attivo</span>
+        {% endif %}
+         &middot; Creato il {{ user_info[6] }}
+      </div>
+    </div>
+  </div>
+
+  <div class="profile-main">
+    {% if is_own %}
+    <div class="card">
+      <h3 style="margin:0 0 14px">Informazioni personali</h3>
+      <form method="post" action="/profile">
+        <input type="hidden" name="action" value="update_profile">
+        <div class="form-grid">
+          <div>
+            <label>Nome</label>
+            <input type="text" name="first_name" value="{{ user_info[7] or '' }}" placeholder="Nome">
+          </div>
+          <div>
+            <label>Cognome</label>
+            <input type="text" name="last_name" value="{{ user_info[8] or '' }}" placeholder="Cognome">
+          </div>
+          <div>
+            <label>Data di nascita</label>
+            <input type="date" name="date_of_birth" value="{{ user_info[9] or '' }}">
+          </div>
+        </div>
+        <div style="margin-top:10px">
+          <label>Breve descrizione</label>
+          <textarea name="bio" rows="3" placeholder="Racconta qualcosa di te...">{{ user_info[10] or '' }}</textarea>
+        </div>
+        <div class="form-grid" style="margin-top:10px">
+          <div>
+            <label>Domanda di sicurezza</label>
+            <input type="text" name="security_question" value="{{ user_info[12] or '' }}"
+                   placeholder="Es: Qual è il nome del tuo primo animale?">
+          </div>
+          <div>
+            <label>Risposta di sicurezza{% if user_info[12] %} (già impostata — inserisci per cambiare){% endif %}</label>
+            <input type="text" name="security_answer" placeholder="Risposta">
+          </div>
+        </div>
+        <button type="submit" style="margin-top:14px">Salva profilo</button>
+      </form>
     </div>
 
-    <div style="font-weight:600;color:#64748b">Stato</div>
-    <div>
-      {% if user_info[5] %}
-        <span style="color:#dc2626">Bloccato</span>
-      {% else %}
-        <span style="color:#059669">Attivo</span>
-      {% endif %}
+    <div class="card">
+      <h3 style="margin:0 0 14px">Foto profilo</h3>
+      <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+        <form method="post" action="/profile" enctype="multipart/form-data" style="display:flex;gap:8px;align-items:center">
+          <input type="hidden" name="action" value="upload_photo">
+          <input type="file" name="profile_photo" accept="image/*" style="flex:1">
+          <button type="submit">Carica</button>
+        </form>
+        {% if user_info[11] %}
+        <form method="post" action="/profile">
+          <input type="hidden" name="action" value="remove_photo">
+          <button type="submit" class="danger" style="font-size:0.85em">Rimuovi foto</button>
+        </form>
+        {% endif %}
+      </div>
     </div>
 
-    <div style="font-weight:600;color:#64748b">Account creato il</div>
-    <div>{{ user_info[6] }}</div>
+    <div class="card">
+      <h3 style="margin:0 0 14px">Cambia password</h3>
+      <form method="post" action="/profile">
+        <input type="hidden" name="action" value="change_password">
+        <div style="max-width:400px">
+          <label>Password attuale</label>
+          <input type="password" name="current_password" required style="width:100%">
+          <label>Nuova password</label>
+          <input type="password" name="new_password" required minlength="6" style="width:100%">
+          <label>Conferma nuova password</label>
+          <input type="password" name="confirm_password" required minlength="6" style="width:100%">
+        </div>
+        <button type="submit" style="margin-top:12px">Cambia password</button>
+      </form>
+    </div>
+    {% else %}
+    <div class="card">
+      <p style="color:#64748b">Stai visualizzando il profilo di <strong>{{ user_info[1] }}</strong>.</p>
+    </div>
+    {% endif %}
+
+    {% if user_groups %}
+    <div class="card">
+      <h3 style="margin:0 0 14px">Gruppi</h3>
+      {% for group_id, group_name, group_desc, role_in_group, group_blocked in user_groups %}
+      <div class="group-card{% if group_blocked %} group-blocked{% endif %}">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
+          <div>
+            <strong>{{ group_name }}</strong>
+            {% if group_blocked %}
+              <span class="group-status-badge blocked">Bloccato</span>
+            {% else %}
+              <span class="group-status-badge active">Attivo</span>
+            {% endif %}
+          </div>
+          <span class="role-badge {% if role_in_group == 'Creatore' %}role-admin{% else %}role-basic{% endif %}">{{ role_in_group }}</span>
+        </div>
+        {% if group_desc %}
+          <div style="font-size:0.88em;color:#64748b;margin-top:4px">{{ group_desc }}</div>
+        {% endif %}
+        {% if group_members_map[group_id] %}
+        <div style="margin-top:8px;font-size:0.85em;color:#475569">
+          <span style="font-weight:500">Membri:</span>
+          {% for member_name, member_role in group_members_map[group_id] %}
+            <span class="member-chip">{{ member_name }}{% if member_role %} <span class="member-role">({{ member_role }})</span>{% endif %}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

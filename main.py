@@ -1,6 +1,6 @@
-from flask import Flask, render_template, request, session, redirect, url_for, flash
+from flask import Flask, render_template, request, session, redirect, url_for, flash, send_from_directory
 from datetime import datetime
-import os, functools, sqlite3
+import os, functools, sqlite3, secrets, string, uuid
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from settings import *
@@ -294,8 +294,9 @@ def admin_user_promote(uid):
     user = db.execute("SELECT id, username, role FROM users WHERE id = ?", (uid,)).fetchone()
     if user and user[2] == 'basic':
         db.execute("UPDATE users SET role = 'admin' WHERE id = ?", (uid,))
+        db.execute("UPDATE groups SET blocked = 0 WHERE created_by = ?", (uid,))
         db.commit()
-        flash(f"Utente '{user[1]}' promosso ad Admin.", "success")
+        flash(f"Utente '{user[1]}' promosso ad Admin. Gruppi riattivati.", "success")
     else:
         flash("Utente non trovato o già Admin.", "error")
     db.close()
@@ -310,8 +311,9 @@ def admin_user_demote(uid):
     user = db.execute("SELECT id, username, role FROM users WHERE id = ?", (uid,)).fetchone()
     if user and user[2] == 'admin':
         db.execute("UPDATE users SET role = 'basic' WHERE id = ?", (uid,))
+        db.execute("UPDATE groups SET blocked = 1 WHERE created_by = ?", (uid,))
         db.commit()
-        flash(f"Utente '{user[1]}' declassato a Basic.", "success")
+        flash(f"Utente '{user[1]}' declassato a Basic. Gruppi creati bloccati.", "success")
     else:
         flash("Utente non trovato o non è Admin.", "error")
     db.close()
@@ -341,8 +343,11 @@ def admin_user_remove(uid):
     username = user[1]
     db_path = user[2]
 
-    db.execute("DELETE FROM group_members WHERE user_id = ?", (uid,))
+    group_ids = [r[0] for r in db.execute("SELECT id FROM groups WHERE created_by = ?", (uid,)).fetchall()]
+    for gid in group_ids:
+        db.execute("DELETE FROM group_members WHERE group_id = ?", (gid,))
     db.execute("DELETE FROM groups WHERE created_by = ?", (uid,))
+    db.execute("DELETE FROM group_members WHERE user_id = ?", (uid,))
     db.execute("DELETE FROM users WHERE id = ?", (uid,))
     db.commit()
     db.close()
@@ -379,11 +384,11 @@ def admin_groups():
 
     if role == 'super_admin':
         groups = db.execute(
-            "SELECT g.id, g.name, g.description, u.username, g.created_at FROM groups g JOIN users u ON u.id = g.created_by ORDER BY g.created_at"
+            "SELECT g.id, g.name, g.description, u.username, g.created_at, g.blocked FROM groups g JOIN users u ON u.id = g.created_by ORDER BY g.blocked, g.created_at"
         ).fetchall()
     else:
         groups = db.execute(
-            "SELECT g.id, g.name, g.description, u.username, g.created_at FROM groups g JOIN users u ON u.id = g.created_by WHERE g.created_by = ? ORDER BY g.created_at",
+            "SELECT g.id, g.name, g.description, u.username, g.created_at, g.blocked FROM groups g JOIN users u ON u.id = g.created_by WHERE g.created_by = ? ORDER BY g.blocked, g.created_at",
             (user_id,)
         ).fetchall()
     db.close()
@@ -399,7 +404,7 @@ def admin_group_detail(gid):
     db = get_users_db()
 
     group = db.execute(
-        "SELECT g.id, g.name, g.description, g.created_by FROM groups g WHERE g.id = ?", (gid,)
+        "SELECT g.id, g.name, g.description, g.created_by, g.blocked FROM groups g WHERE g.id = ?", (gid,)
     ).fetchone()
     if not group:
         db.close()
@@ -411,8 +416,15 @@ def admin_group_detail(gid):
         flash("Accesso negato.", "error")
         return redirect(url_for('admin_groups'))
 
+    creator = db.execute("SELECT username FROM users WHERE id = ?", (group[3],)).fetchone()
+    creator_username = creator[0] if creator else '?'
+    is_blocked = group[4]
+
     if request.method == 'POST':
-        action = request.form.get('action', '')
+        if is_blocked:
+            flash("Il gruppo è bloccato. Impossibile eseguire azioni.", "error")
+        else:
+            action = request.form.get('action', '')
 
         if action == 'invite':
             target_username = request.form.get('username', '').strip()
@@ -466,6 +478,7 @@ def admin_group_detail(gid):
 
     return render_template('admin_group_detail.html',
         group=group, members=members, candidates=candidates,
+        creator_username=creator_username,
         current_year=session.get('year'))
 
 
@@ -506,8 +519,8 @@ def invitations():
 
 # ─── Profile ───
 
-@app.route('/profile')
-@app.route('/profile/<username>')
+@app.route('/profile', methods=['GET', 'POST'])
+@app.route('/profile/<username>', methods=['GET', 'POST'])
 @login_required
 def profile(username=None):
     if username is None:
@@ -519,16 +532,297 @@ def profile(username=None):
 
     db = get_users_db()
     user_info = db.execute(
-        "SELECT id, username, password_hash, db_path, role, blocked, created_at FROM users WHERE username = ?",
+        "SELECT id, username, password_hash, db_path, role, blocked, created_at, "
+        "first_name, last_name, date_of_birth, bio, profile_photo, security_question "
+        "FROM users WHERE username = ?",
         (username,)
     ).fetchone()
-    db.close()
 
     if not user_info:
+        db.close()
         flash("Utente non trovato.", "error")
         return redirect(url_for('add_expense'))
 
-    return render_template('user_profile.html', user_info=user_info, current_year=session.get('year'))
+    is_own = (username == session['username'])
+
+    if request.method == 'POST':
+        action = request.form.get('action', '')
+
+        if action == 'update_profile' and is_own:
+            first_name = request.form.get('first_name', '').strip()
+            last_name = request.form.get('last_name', '').strip()
+            date_of_birth = request.form.get('date_of_birth', '').strip()
+            bio = request.form.get('bio', '').strip()
+            security_question = request.form.get('security_question', '').strip()
+            security_answer = request.form.get('security_answer', '').strip()
+
+            security_answer_hash = ''
+            if security_answer:
+                security_answer_hash = generate_password_hash(security_answer.lower().strip())
+
+            db.execute(
+                "UPDATE users SET first_name=?, last_name=?, date_of_birth=?, bio=?, "
+                "security_question=?, security_answer_hash=? WHERE id=?",
+                (first_name, last_name, date_of_birth, bio,
+                 security_question, security_answer_hash, user_info[0])
+            )
+            db.commit()
+            db.close()
+            flash("Profilo aggiornato.", "success")
+            return redirect(url_for('profile', username=username))
+
+        elif action == 'upload_photo' and is_own:
+            photo = request.files.get('profile_photo')
+            if photo and photo.filename:
+                ext = photo.filename.rsplit('.', 1)[-1].lower()
+                if ext not in ('jpg', 'jpeg', 'png', 'gif'):
+                    db.close()
+                    flash("Formato non supportato. Usa JPG, PNG o GIF.", "error")
+                    return redirect(url_for('profile', username=username))
+
+                photo.seek(0, 2)
+                size = photo.tell()
+                photo.seek(0)
+                if size > 5 * 1024 * 1024:
+                    db.close()
+                    flash("La foto non deve superare 5MB.", "error")
+                    return redirect(url_for('profile', username=username))
+
+                old_photo = user_info[11]
+                if old_photo:
+                    old_path = os.path.join(DATA_DIR, 'uploads', 'profiles', old_photo)
+                    if os.path.exists(old_path):
+                        os.remove(old_path)
+
+                filename = f"{user_info[0]}_{uuid.uuid4().hex[:8]}.{ext}"
+                upload_dir = os.path.join(DATA_DIR, 'uploads', 'profiles')
+                os.makedirs(upload_dir, exist_ok=True)
+                photo.save(os.path.join(upload_dir, filename))
+
+                db.execute("UPDATE users SET profile_photo=? WHERE id=?", (filename, user_info[0]))
+                db.commit()
+                db.close()
+                flash("Foto profilo aggiornata.", "success")
+                return redirect(url_for('profile', username=username))
+            else:
+                db.close()
+                flash("Nessuna foto selezionata.", "error")
+                return redirect(url_for('profile', username=username))
+
+        elif action == 'remove_photo' and is_own:
+            old_photo = user_info[11]
+            if old_photo:
+                old_path = os.path.join(DATA_DIR, 'uploads', 'profiles', old_photo)
+                if os.path.exists(old_path):
+                    os.remove(old_path)
+                db.execute("UPDATE users SET profile_photo='' WHERE id=?", (user_info[0],))
+                db.commit()
+            db.close()
+            flash("Foto profilo rimossa.", "success")
+            return redirect(url_for('profile', username=username))
+
+        elif action == 'change_password' and is_own:
+            current_password = request.form.get('current_password', '')
+            new_password = request.form.get('new_password', '')
+            confirm_password = request.form.get('confirm_password', '')
+
+            if not current_password or not new_password or not confirm_password:
+                db.close()
+                flash("Compila tutti i campi password.", "error")
+                return redirect(url_for('profile', username=username))
+
+            if not check_password_hash(user_info[2], current_password):
+                db.close()
+                flash("Password attuale errata.", "error")
+                return redirect(url_for('profile', username=username))
+
+            if new_password != confirm_password:
+                db.close()
+                flash("Le nuove password non corrispondono.", "error")
+                return redirect(url_for('profile', username=username))
+
+            if len(new_password) < 6:
+                db.close()
+                flash("La nuova password deve avere almeno 6 caratteri.", "error")
+                return redirect(url_for('profile', username=username))
+
+            new_hash = generate_password_hash(new_password)
+            db.execute("UPDATE users SET password_hash=? WHERE id=?", (new_hash, user_info[0]))
+            db.commit()
+            db.close()
+            flash("Password cambiata.", "success")
+            return redirect(url_for('profile', username=username))
+
+    user_groups = db.execute("""
+        SELECT g.id, g.name, g.description,
+            CASE WHEN g.created_by = ? THEN 'Creatore' ELSE 'Membro' END,
+            g.blocked
+        FROM groups g
+        WHERE g.created_by = ?
+        UNION
+        SELECT g.id, g.name, g.description, 'Membro', g.blocked
+        FROM groups g
+        JOIN group_members gm ON gm.group_id = g.id
+        WHERE gm.user_id = ? AND gm.status = 'accepted'
+        ORDER BY 2
+    """, (user_info[0], user_info[0], user_info[0])).fetchall()
+
+    group_members_map = {}
+    for gid, gname, gdesc, grole, gblocked in user_groups:
+        members = db.execute("""
+            SELECT u.username,
+                CASE WHEN g.created_by = u.id THEN 'Creatore'
+                     WHEN u.role = 'super_admin' THEN 'Super Admin'
+                     WHEN u.role = 'admin' THEN 'Admin'
+                     ELSE 'Basic'
+                END
+            FROM group_members gm
+            JOIN users u ON u.id = gm.user_id
+            JOIN groups g ON g.id = gm.group_id
+            WHERE gm.group_id = ? AND gm.status = 'accepted'
+            UNION
+            SELECT u.username,
+                CASE WHEN u.role = 'super_admin' THEN 'Super Admin'
+                     WHEN u.role = 'admin' THEN 'Admin'
+                     ELSE 'Basic'
+                END
+            FROM groups g
+            JOIN users u ON u.id = g.created_by
+            WHERE g.id = ?
+            ORDER BY 1
+        """, (gid, gid)).fetchall()
+        group_members_map[gid] = members
+
+    db.close()
+    return render_template('user_profile.html', user_info=user_info, is_own=is_own,
+                           user_groups=user_groups, group_members_map=group_members_map,
+                           current_year=session.get('year'))
+
+
+@app.route('/uploads/profiles/<filename>')
+def uploaded_profile_photo(filename):
+    return send_from_directory(os.path.join(DATA_DIR, 'uploads', 'profiles'), filename)
+
+
+# ─── Forgot Password ───
+
+@app.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    if 'user_id' in session:
+        return redirect(url_for('add_expense'))
+
+    step = request.args.get('step', 'username')
+    username = request.form.get('username', '').strip() or request.args.get('username', '').strip()
+
+    if request.method == 'POST':
+        action = request.form.get('action', '')
+
+        if action == 'lookup':
+            if not username:
+                flash("Inserisci lo username.", "error")
+                return render_template('forgot_password.html', step='username',
+                                       current_year=session.get('year'))
+
+            db = get_users_db()
+            user = db.execute(
+                "SELECT id, username, security_question, security_answer_hash FROM users WHERE username = ?",
+                (username,)
+            ).fetchone()
+            db.close()
+
+            if not user:
+                flash("Utente non trovato.", "error")
+                return render_template('forgot_password.html', step='username',
+                                       current_year=session.get('year'))
+
+            if not user[2]:
+                flash("Nessuna domanda di sicurezza impostata. Contatta un amministratore.",
+                      "error")
+                return render_template('forgot_password.html', step='username',
+                                       current_year=session.get('year'))
+
+            return render_template('forgot_password.html', step='answer',
+                                   username=username, security_question=user[2],
+                                   current_year=session.get('year'))
+
+        elif action == 'answer':
+            answer = request.form.get('answer', '').strip()
+            if not answer:
+                flash("Inserisci la risposta.", "error")
+                return render_template('forgot_password.html', step='answer',
+                                       username=username,
+                                       security_question=request.form.get('security_question', ''),
+                                       current_year=session.get('year'))
+
+            db = get_users_db()
+            user = db.execute(
+                "SELECT id, security_answer_hash FROM users WHERE username = ?",
+                (username,)
+            ).fetchone()
+            db.close()
+
+            if not user or not user[1] or not check_password_hash(user[1], answer.lower().strip()):
+                flash("Risposta errata.", "error")
+                return render_template('forgot_password.html', step='answer',
+                                       username=username,
+                                       security_question=request.form.get('security_question', ''),
+                                       current_year=session.get('year'))
+
+            return render_template('forgot_password.html', step='reset',
+                                   username=username, current_year=session.get('year'))
+
+        elif action == 'reset':
+            new_password = request.form.get('new_password', '')
+            confirm_password = request.form.get('confirm_password', '')
+
+            if not new_password or not confirm_password:
+                flash("Compila tutti i campi.", "error")
+                return render_template('forgot_password.html', step='reset',
+                                       username=username, current_year=session.get('year'))
+
+            if new_password != confirm_password:
+                flash("Le password non corrispondono.", "error")
+                return render_template('forgot_password.html', step='reset',
+                                       username=username, current_year=session.get('year'))
+
+            if len(new_password) < 6:
+                flash("La password deve avere almeno 6 caratteri.", "error")
+                return render_template('forgot_password.html', step='reset',
+                                       username=username, current_year=session.get('year'))
+
+            db = get_users_db()
+            new_hash = generate_password_hash(new_password)
+            db.execute("UPDATE users SET password_hash=? WHERE username=?", (new_hash, username))
+            db.commit()
+            db.close()
+            flash("Password reimpostata. Ora puoi accedere.", "success")
+            return redirect(url_for('index'))
+
+    return render_template('forgot_password.html', step=step, username=username,
+                           current_year=session.get('year'))
+
+
+# ─── Admin: Reset Password ───
+
+@app.route('/admin/users/<int:uid>/reset-password', methods=['POST'])
+@login_required
+@role_required('super_admin')
+def admin_user_reset_password(uid):
+    db = get_users_db()
+    user = db.execute("SELECT id, username FROM users WHERE id = ?", (uid,)).fetchone()
+    if not user:
+        db.close()
+        flash("Utente non trovato.", "error")
+        return redirect(url_for('admin_users'))
+
+    temp_password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(10))
+    temp_hash = generate_password_hash(temp_password)
+    db.execute("UPDATE users SET password_hash=? WHERE id=?", (temp_hash, uid))
+    db.commit()
+    db.close()
+
+    flash(f"Password temporanea per '{user[1]}': {temp_password}", "success")
+    return redirect(url_for('admin_users'))
 
 
 # ─── Add Expense ───

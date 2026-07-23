@@ -3,6 +3,13 @@
 <h2>Gruppo: {{ group[1] }}</h2>
 <p><a href="/admin/groups">← Torna ai gruppi</a></p>
 
+{% if group[4] %}
+<div class="group-blocked-banner">
+  ⚠️ Questo gruppo è bloccato perché il creatore è stato declassato a Basic.
+  Promuovere di nuovo il creatore per riattivare il gruppo.
+</div>
+{% endif %}
+
 {% if group[2] %}
 <div class="card">
   <p style="color:#475569;margin:0">{{ group[2] }}</p>
@@ -11,19 +18,30 @@
 
 <div class="card">
   <h3>Membri</h3>
-  {% if members %}
   <table>
     <thead>
       <tr>
         <th>Username</th>
+        <th>Ruolo</th>
         <th>Stato</th>
+        {% if not group[4] %}
         <th>Azioni</th>
+        {% endif %}
       </tr>
     </thead>
     <tbody>
+      <tr>
+        <td><strong>{{ creator_username }}</strong></td>
+        <td><span class="role-badge role-admin">Creatore</span></td>
+        <td><span style="color:#059669">Attivo</span></td>
+        {% if not group[4] %}
+        <td></td>
+        {% endif %}
+      </tr>
       {% for gm_id, uid, uname, status in members %}
       <tr>
         <td>{{ uname }}</td>
+        <td></td>
         <td>
           {% if status == 'accepted' %}
             <span style="color:#059669">Accettato</span>
@@ -35,6 +53,7 @@
             <span style="color:#6b7280">Rifiutato</span>
           {% endif %}
         </td>
+        {% if not group[4] %}
         <td style="white-space:nowrap">
           {% if status != 'blocked' %}
           <form method="post" style="display:inline">
@@ -56,15 +75,14 @@
             <button type="submit" class="danger" style="padding:3px 8px;font-size:0.82em">Rimuovi</button>
           </form>
         </td>
+        {% endif %}
       </tr>
       {% endfor %}
     </tbody>
   </table>
-  {% else %}
-  <p>Nessun membro nel gruppo.</p>
-  {% endif %}
 </div>
 
+{% if not group[4] %}
 <div class="card">
   <h3>Invita utente</h3>
   {% if candidates %}
@@ -84,4 +102,5 @@
   <p>Nessun utente disponibile da invitare.</p>
   {% endif %}
 </div>
+{% endif %}
 {% endblock %}
