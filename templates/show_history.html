@@ -54,6 +54,20 @@
     <label><input type="checkbox" checked data-col="note" onchange="toggleCol(this)"> Note</label>
     <label><input type="checkbox" checked data-col="amount" onchange="toggleCol(this)"> Amount</label>
   </div>
+  <div class="category-filters" id="category-filters">
+    {% set ns_cat = namespace(seen=[]) %}
+    {% for entry in entries %}
+      {% if entry[2] not in ns_cat.seen %}
+        {% set ns_cat.seen = ns_cat.seen + [entry[2]] %}
+      {% endif %}
+    {% endfor %}
+    {% for cat in ns_cat.seen %}
+    <span class="track-toggle-item" onclick="toggleCategory(this)" data-cat="{{ cat }}">{{ cat }}</span>
+    {% endfor %}
+  </div>
+  <div class="note-search">
+    <input type="text" id="note-search-input" placeholder="Cerca nelle note..." oninput="applyFilters()">
+  </div>
   <table class="history-table">
     <tr>
       <th data-col="id">ID</th>
@@ -62,13 +76,14 @@
       <th data-col="category">Category</th>
       <th data-col="note">Note</th>
       <th data-col="amount">Amount</th>
+      <th data-col="azione">Azione</th>
     </tr>
     {% set ns = namespace(prev_month=None) %}
     {% for entry in entries %}
     {% set cur_month = entry[1][:7] %}
     {% if cur_month != ns.prev_month %}
     <tr class="month-header">
-      <td colspan="6">
+      <td colspan="7">
         {% set month_num = entry[1][5:7] | int %}
         {{ entry[1][:4] }} {{ MONTHS_INDEX[month_num] }} ({{ month_counts[cur_month] }})
       </td>
@@ -82,6 +97,10 @@
       <td data-col="category">{{ entry[2] }}</td>
       <td data-col="note">{{ entry[3] }}</td>
       <td data-col="amount">{{ "%.2f"|format(entry[4]) }}</td>
+      <td data-col="azione">
+        <button type="button" class="edit-btn" onclick="editRow(this, {{ entry[0] }}, '{{ entry[3]|e }}', {{ entry[4] }})">Modifica</button>
+        <button type="button" class="edit-btn edit-delete" onclick="deleteExpense({{ entry[0] }})">Elimina</button>
+      </td>
     </tr>
     {% endfor %}
   </table>
@@ -102,6 +121,111 @@ document.addEventListener('DOMContentLoaded', function() {
   var ts = document.querySelector('[data-col="timestamp"]');
   if (ts && ts.tagName === 'INPUT') toggleCol(ts);
 });
+
+function toggleCategory(el) {
+  el.classList.toggle('selected');
+  applyFilters();
+}
+
+function applyFilters() {
+  var query = document.getElementById('note-search-input').value.toLowerCase().trim();
+  var chips = document.querySelectorAll('#category-filters .track-toggle-item.selected');
+  var activeCats = [];
+  chips.forEach(function(c) { activeCats.push(c.getAttribute('data-cat')); });
+  var filterCat = activeCats.length > 0;
+  var rows = document.querySelectorAll('.history-table tr');
+  rows.forEach(function(row) {
+    if (row.classList.contains('month-header')) return;
+    var catCell = row.querySelector('td[data-col="category"]');
+    var noteCell = row.querySelector('td[data-col="note"]');
+    if (!catCell) return;
+    var cat = catCell.textContent.trim();
+    var note = noteCell ? noteCell.textContent.toLowerCase() : '';
+    var catOk = !filterCat || activeCats.indexOf(cat) !== -1;
+    var noteOk = !query || note.indexOf(query) !== -1;
+    if (catOk && noteOk) {
+      row.classList.toggle('row-match', query.length > 0);
+      row.style.display = '';
+    } else {
+      row.classList.remove('row-match');
+      row.style.display = 'none';
+    }
+  });
+}
+
+function editRow(btn, id, nota, amount) {
+  var tr = btn.closest('tr');
+  var noteCell = tr.querySelector('td[data-col="note"]');
+  var amountCell = tr.querySelector('td[data-col="amount"]');
+  var actionCell = tr.querySelector('td[data-col="azione"]');
+  tr.dataset.origNote = noteCell.textContent.trim();
+  tr.dataset.origAmount = amountCell.textContent.trim();
+  tr.dataset.expenseId = id;
+  noteCell.innerHTML = '<input type="text" class="edit-input" value="' + nota.replace(/"/g, '&quot;') + '">';
+  amountCell.innerHTML = '<input type="number" class="edit-input" step="0.01" value="' + amount + '">';
+  actionCell.innerHTML =
+    '<button type="button" class="edit-btn edit-confirm" onclick="confirmEdit(' + id + ', this)">Conferma</button>' +
+    '<button type="button" class="edit-btn edit-cancel" onclick="cancelEdit(this)">Annulla</button>';
+}
+
+function cancelEdit(btn) {
+  var tr = btn.closest('tr');
+  var noteCell = tr.querySelector('td[data-col="note"]');
+  var amountCell = tr.querySelector('td[data-col="amount"]');
+  var actionCell = tr.querySelector('td[data-col="azione"]');
+  noteCell.textContent = tr.dataset.origNote;
+  amountCell.textContent = tr.dataset.origAmount;
+  var escaped = tr.dataset.origNote.replace(/'/g, "\\'");
+  actionCell.innerHTML = '<button type="button" class="edit-btn" onclick="editRow(this, ' + tr.dataset.expenseId + ', \'' + escaped + '\', ' + tr.dataset.origAmount + ')">Modifica</button>';
+}
+
+function confirmEdit(id, btn) {
+  var tr = btn.closest('tr');
+  var newNota = tr.querySelector('td[data-col="note"] input').value;
+  var newImporto = tr.querySelector('td[data-col="amount"] input').value;
+  var form = document.createElement('form');
+  form.method = 'post';
+  form.action = '/edit-expense';
+  var fields = {
+    'expense_id': id,
+    'nota': newNota,
+    'importo': newImporto,
+    'target_user': '{{ target_user }}',
+    'start_date': document.getElementById('start_date').value,
+    'end_date': document.getElementById('end_date').value
+  };
+  for (var k in fields) {
+    var input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = k;
+    input.value = fields[k];
+    form.appendChild(input);
+  }
+  document.body.appendChild(form);
+  form.submit();
+}
+
+function deleteExpense(id) {
+  if (!confirm('Eliminare questa spesa?')) return;
+  var form = document.createElement('form');
+  form.method = 'post';
+  form.action = '/delete-expense';
+  var fields = {
+    'expense_id': id,
+    'target_user': '{{ target_user }}',
+    'start_date': document.getElementById('start_date').value,
+    'end_date': document.getElementById('end_date').value
+  };
+  for (var k in fields) {
+    var input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = k;
+    input.value = fields[k];
+    form.appendChild(input);
+  }
+  document.body.appendChild(form);
+  form.submit();
+}
 </script>
 {% endif %}
 

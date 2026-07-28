@@ -1,4 +1,5 @@
 import sqlite3, settings
+from datetime import datetime
 
 class SQLManager:
     
@@ -49,7 +50,8 @@ class SQLManager:
 
 
     def insert_expense_in_registry(self, category, nota, amount, mese_data=None):
-        self.cursor.execute("INSERT INTO registro_spese (categoria, nota, importo, data) VALUES (?, ?, ?, ?)", (category, nota, amount, mese_data))
+        ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        self.cursor.execute("INSERT INTO registro_spese (timestamp, categoria, nota, importo, data) VALUES (?, ?, ?, ?, ?)", (ts, category, nota, amount, mese_data))
 
 
     def check_month_exists(self, month) -> bool:
@@ -177,6 +179,22 @@ class SQLManager:
             self.update_value_by_attrANDmonth(month, category, new_value)
             return last_expense
         return None
+
+
+    def update_expense_in_registry(self, expense_id, new_nota, new_importo):
+        """Update nota and importo of a registry expense. Returns (categoria, old_importo, data) or None."""
+        row = self.cursor.execute(
+            "SELECT categoria, importo, data FROM registro_spese WHERE id = ?",
+            (expense_id,)
+        ).fetchone()
+        if not row:
+            return None
+        old_categoria, old_importo, data = row
+        self.cursor.execute(
+            "UPDATE registro_spese SET nota = ?, importo = ? WHERE id = ?",
+            (new_nota, new_importo, expense_id)
+        )
+        return old_categoria, old_importo, data
 
 
 def generate_user_db_sql(variabili, fisse):

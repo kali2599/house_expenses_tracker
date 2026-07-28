@@ -1,5 +1,6 @@
---------- Create users table (regsistro_spese and spese_mensili) when a new user is created ---------
+-- ####################################################################################################################################### --
 --------- This script will be executed each time a new user is created, ensuring that the necessary tables are set up for their data ---------
+-- ####################################################################################################################################### --
 
 
 -- Create registro_spese table

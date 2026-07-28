@@ -155,6 +155,41 @@ label { display: inline-block; margin: 4px 0; }
 /* ─── Results section ─── */
 .results-section { animation: fadeIn 0.35s ease; }
 
+/* ─── Note search ─── */
+.note-search { margin-bottom: 12px; }
+.note-search input {
+  width: 100%; padding: 9px 12px; font-size: 0.92em;
+  border: 1px solid #d1d5db; border-radius: 6px;
+  background: #f8fafc; transition: border-color 0.15s, box-shadow 0.15s;
+}
+.note-search input:focus {
+  outline: none; border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
+}
+tr.row-match td { background: #d1fae5; }
+
+/* ─── Category filters ─── */
+.category-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+
+/* ─── Inline edit ─── */
+.edit-btn {
+  background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0;
+  padding: 4px 10px; border-radius: 5px; cursor: pointer;
+  font-size: 0.82em; font-weight: 500; transition: all 0.15s;
+}
+.edit-btn:hover { border-color: #2563eb; color: #2563eb; background: #eff6ff; }
+.edit-confirm { background: #d1fae5; color: #065f46; border-color: #a7f3d0; }
+.edit-confirm:hover { background: #a7f3d0; border-color: #059669; color: #065f46; }
+.edit-cancel { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+.edit-cancel:hover { background: #fecaca; border-color: #dc2626; color: #991b1b; }
+.edit-delete { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+.edit-delete:hover { background: #fecaca; border-color: #dc2626; color: #991b1b; }
+.edit-input {
+  width: 100%; padding: 4px 6px; font-size: 0.92em;
+  border: 1px solid #2563eb; border-radius: 4px;
+  box-shadow: 0 0 0 2px rgba(37,99,235,0.15);
+}
+
 /* ─── Empty state ─── */
 .empty-state { text-align: center; padding: 48px 20px; color: #94a3b8; font-size: 0.95em; background: #fff; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
 

@@ -1138,73 +1138,6 @@ def show_history_redirect():
 
 # ─── Undo Expense ───
 
-@app.route('/undo-expense', methods=['GET', 'POST'])
-@login_required
-def undo_expense():
-    target_user = request.args.get('target_user') or request.form.get('target_user') or session['username']
-
-    if target_user != session['username']:
-        sm = get_db_for_user(target_user)
-        if not sm:
-            return redirect(url_for('undo_expense'))
-    else:
-        sm = get_db()
-
-    visible_users = get_visible_users()
-    year = session.get('year')
-    months = sm.get_months_list(year)
-
-    expenses = None
-    selected_month = None
-
-    if request.method == 'POST':
-        action = request.form.get('action', '')
-        month_raw = request.form.get('month', '')
-
-        if month_raw:
-            if '_' in month_raw:
-                selected_month = month_raw
-            elif month_raw.isdigit():
-                month_num = int(month_raw)
-                month_name = MONTHS_INDEX[month_num]
-                selected_month = f"{year}_{month_name}"
-
-        if action == 'show':
-            if not selected_month:
-                flash("Select a month.", "error")
-            else:
-                expenses = sm.get_expenses_for_month(selected_month)
-                if not expenses:
-                    flash("No expenses found for this month.", "info")
-
-        elif action == 'delete':
-            expense_id = request.form.get('expense_id')
-            if not expense_id or not selected_month:
-                flash("Missing expense data.", "error")
-            else:
-                expense = sm.cursor.execute(
-                    "SELECT categoria, importo FROM registro_spese WHERE id = ?",
-                    (expense_id,)
-                ).fetchone()
-                if expense:
-                    category, amount = expense
-                    sm.cursor.execute("DELETE FROM registro_spese WHERE id = ?", (expense_id,))
-                    cur_val = sm.get_value_by_attrANDmonth(selected_month, category)
-                    sm.update_value_by_attrANDmonth(selected_month, category, cur_val - amount)
-                    sm.commit()
-                    flash("Expense deleted successfully!", "success")
-                    expenses = sm.get_expenses_for_month(selected_month)
-                else:
-                    flash("Expense not found.", "error")
-
-    return render_template('undo_expense.html',
-        expenses=expenses,
-        selected_month=selected_month,
-        months=months,
-        visible_users=visible_users, target_user=target_user,
-        current_year=year)
-
-
 # ─── Data Analysis / History ───
 
 @app.route('/data-analysis/history', methods=['GET', 'POST'])
@@ -1241,6 +1174,16 @@ def data_analysis_history():
             for e in entries:
                 m = e[1][:7]
                 month_counts[m] = month_counts.get(m, 0) + 1
+    elif request.method == 'GET':
+        start_raw = request.args.get('start_date', '').strip()
+        end_raw = request.args.get('end_date', '').strip()
+        if start_raw or end_raw:
+            start = parse_date_bound(start_raw, "start")
+            end = parse_date_bound(end_raw, "end")
+            entries = sm.get_registro_entries(start, end)
+            for e in entries:
+                m = e[1][:7]
+                month_counts[m] = month_counts.get(m, 0) + 1
 
     return render_template('show_history.html',
         entries=entries, start_date=start, end_date=end,
@@ -1250,6 +1193,102 @@ def data_analysis_history():
         visible_users=visible_users, target_user=target_user,
         active_view='history',
         current_year=year)
+
+
+@app.route('/edit-expense', methods=['POST'])
+@login_required
+def edit_expense():
+    target_user = request.form.get('target_user') or session['username']
+
+    if target_user != session['username']:
+        sm = get_db_for_user(target_user)
+        if not sm:
+            return redirect(url_for('data_analysis_history'))
+    else:
+        sm = get_db()
+
+    expense_id = request.form.get('expense_id', '').strip()
+    new_nota = request.form.get('nota', '').strip() or 'N/A'
+    new_importo_raw = request.form.get('importo', '').strip()
+
+    if not expense_id or not new_importo_raw:
+        flash("Dati mancanti.", "error")
+        return redirect(url_for('data_analysis_history'))
+
+    try:
+        new_importo = round(float(new_importo_raw), 2)
+    except ValueError:
+        flash("Importo non valido.", "error")
+        return redirect(url_for('data_analysis_history'))
+
+    result = sm.update_expense_in_registry(expense_id, new_nota, new_importo)
+    if not result:
+        flash("Spesa non trovata.", "error")
+        return redirect(url_for('data_analysis_history'))
+
+    old_categoria, old_importo, data = result
+
+    if new_importo != old_importo:
+        month_num = int(data[:2])
+        month_year = data[3:]
+        month_key = f"{month_year}_{MONTHS_INDEX[month_num]}"
+        ensure_month(sm, month_key)
+        current_val = sm.get_value_by_attrANDmonth(month_key, old_categoria)
+        delta = new_importo - old_importo
+        sm.update_value_by_attrANDmonth(month_key, old_categoria, round(current_val + delta, 2))
+
+    sm.commit()
+    flash("Spesa modificata con successo!", "success")
+
+    start_raw = request.form.get('start_date', '').strip()
+    end_raw = request.form.get('end_date', '').strip()
+    return redirect(url_for('data_analysis_history',
+        target_user=target_user, start_date=start_raw, end_date=end_raw))
+
+
+@app.route('/delete-expense', methods=['POST'])
+@login_required
+def delete_expense():
+    target_user = request.form.get('target_user') or session['username']
+
+    if target_user != session['username']:
+        sm = get_db_for_user(target_user)
+        if not sm:
+            return redirect(url_for('data_analysis_history'))
+    else:
+        sm = get_db()
+
+    expense_id = request.form.get('expense_id', '').strip()
+    if not expense_id:
+        flash("Dati mancanti.", "error")
+        return redirect(url_for('data_analysis_history'))
+
+    expense = sm.cursor.execute(
+        "SELECT categoria, importo, data FROM registro_spese WHERE id = ?",
+        (expense_id,)
+    ).fetchone()
+
+    if not expense:
+        flash("Spesa non trovata.", "error")
+        return redirect(url_for('data_analysis_history'))
+
+    category, amount, data = expense
+    sm.cursor.execute("DELETE FROM registro_spese WHERE id = ?", (expense_id,))
+
+    month_num = int(data[:2])
+    month_year = data[3:]
+    month_key = f"{month_year}_{MONTHS_INDEX[month_num]}"
+    ensure_month(sm, month_key)
+    cur_val = sm.get_value_by_attrANDmonth(month_key, category)
+    sm.update_value_by_attrANDmonth(month_key, category, round(cur_val - amount, 2))
+
+    sm.commit()
+    flash("Spesa eliminata con successo!", "success")
+
+    start_raw = request.form.get('start_date', '').strip()
+    end_raw = request.form.get('end_date', '').strip()
+    return redirect(url_for('data_analysis_history',
+        target_user=target_user, start_date=start_raw, end_date=end_raw))
 
 
 # ─── Change Year ───
