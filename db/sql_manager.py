@@ -1,4 +1,5 @@
-import sqlite3, settings
+import sqlite3
+from config import settings
 from datetime import datetime
 
 class SQLManager:

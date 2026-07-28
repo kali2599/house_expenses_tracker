@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+data/
+flask_secret.key
+push_db.sh
+test.sh
+.git/
+.gitignore
+AGENTS.md
+Readme.md
+Dockerfile
+.dockerignore

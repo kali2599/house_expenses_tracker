@@ -1,5 +1,5 @@
 import calendar
-import settings
+from config import settings
 
 
 def get_color_for_attribute(attribute, value=None):

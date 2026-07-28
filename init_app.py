@@ -5,12 +5,12 @@ Creates required directories, database infrastructure, and secret key.
 Safe to run multiple times (idempotent).
 
 Usage:
-    python3 init.py          # standalone initialization
-    python3 main.py          # auto-initializes at startup via init_app()
+    python3 init_app.py          # standalone initialization
+    python3 main.py              # auto-initializes at startup via init_app()
 """
 
 import os, sqlite3
-from settings import USER_DB_DIR, USERS_DB, DATA_DIR
+from config.settings import USER_DB_DIR, USERS_DB, DATA_DIR
 
 
 def init_app():
