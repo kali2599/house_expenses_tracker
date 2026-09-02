@@ -112,18 +112,287 @@ def get_user_list():
     return users
 
 
+def get_default_fisse_for_user(username):
+    """Return the dict of fixed-expense defaults for a given username."""
+    db = get_users_db()
+    row = db.execute("SELECT custom_default_fisse FROM users WHERE username = ?", (username,)).fetchone()
+    db.close()
+    if not row or not row[0]:
+        return None
+    try:
+        return json.loads(row[0])
+    except ValueError:
+        return None
+
+
+def get_user_attr_meta(username):
+    """Return (custom_variabili, custom_fisse, custom_attribute_history) for a user."""
+    db = get_users_db()
+    row = db.execute(
+        "SELECT custom_variabili, custom_fisse, custom_attribute_history FROM users WHERE username = ?",
+        (username,)
+    ).fetchone()
+    db.close()
+    if not row:
+        return '', '', ''
+    return row[0], row[1], row[2]
+
+
+# ─── Attribute-history helpers ───
+
+MONTH_NUMBER = {name: num for num, name in MONTHS_INDEX.items()}
+ATTR_SYSTEM_COLUMNS = ('mese', 'entrate', 'uscite_variabili', 'uscite_fisse',
+                       'uscite_totali', 'delta')
+
+def month_tuple(key):
+    """Convert a 'YYYY_MESE' month key into a sortable (year, month_number) tuple."""
+    if not key or '_' not in key:
+        return (0, 0)
+    year, month_name = key.split('_', 1)
+    return (int(year), MONTH_NUMBER.get(month_name.upper(), 0))
+
+
+def current_month_key():
+    """Return the real current month key, e.g. '2026_SETTEMBRE'."""
+    now = datetime.now()
+    return f"{now.year}_{MONTHS_INDEX[now.month]}"
+
+
+def normalize_attribute_history(raw_history, raw_variabili, raw_fisse, all_cols):
+    """Return {attr: {'type': ..., 'periods': [[start,end], ...]}}.
+
+    Each period is [start_month, end_month] (inclusive start / exclusive end),
+    where null means "from the beginning" / "still active".
+    Backfills entries for every physical user column so legacy accounts get
+    an 'always active' history without any data migration.
+    """
+    history = {}
+    if raw_history:
+        try:
+            parsed = json.loads(raw_history)
+            if isinstance(parsed, dict):
+                for attr, info in parsed.items():
+                    if not isinstance(info, dict):
+                        continue
+                    periods = info.get('periods')
+                    if isinstance(periods, list) and periods:
+                        norm = []
+                        for p in periods:
+                            if isinstance(p, (list, tuple)) and len(p) == 2:
+                                norm.append([p[0], p[1]])
+                            else:
+                                norm.append([None, None])
+                        history[attr] = {'type': info.get('type', 'fisso'), 'periods': norm}
+                    else:
+                        history[attr] = {'type': info.get('type', 'fisso'), 'periods': [[None, None]]}
+        except ValueError:
+            history = {}
+
+    if all_cols:
+        variabili, fisse = parse_custom_lists(raw_variabili, raw_fisse, all_cols)
+        type_of = {col: 'variabile' for col in variabili}
+        type_of.update({col: 'fisso' for col in fisse})
+        for col in all_cols:
+            if col in ATTR_SYSTEM_COLUMNS:
+                continue
+            if col not in history:
+                history[col] = {'type': type_of.get(col, 'fisso'), 'periods': [[None, None]]}
+
+    return history
+
+
+def attr_active_in(periods, m_tuple):
+    for start, end in periods:
+        if (start is None or month_tuple(start) <= m_tuple) and \
+           (end is None or m_tuple < month_tuple(end)):
+            return True
+    return False
+
+
+def get_active_attrs(history):
+    return [attr for attr, info in history.items()
+            if any(p[1] is None for p in info['periods'])]
+
+
+def get_removed_attrs(history):
+    return [attr for attr, info in history.items()
+            if not any(p[1] is None for p in info['periods'])]
+
+
+def get_effective_columns(history, month_key):
+    """Canonical ordered columns for a specific month (user attrs filtered by activity)."""
+    m_tuple = month_tuple(month_key)
+    variabili = [a for a in history if history[a]['type'] == 'variabile' and
+                 attr_active_in(history[a]['periods'], m_tuple)]
+    fisse = [a for a in history if history[a]['type'] == 'fisso' and
+             attr_active_in(history[a]['periods'], m_tuple)]
+    return ['mese', 'entrate'] + variabili + ['uscite_variabili'] + \
+           fisse + ['uscite_fisse', 'uscite_totali', 'delta']
+
+
+def get_canonical_columns(history):
+    """Canonical ordered columns across all attributes (for cross-month views)."""
+    variabili = [a for a in history if history[a]['type'] == 'variabile']
+    fisse = [a for a in history if history[a]['type'] == 'fisso']
+    return ['mese', 'entrate'] + variabili + ['uscite_variabili'] + \
+           fisse + ['uscite_fisse', 'uscite_totali', 'delta']
+
+
+def save_attribute_history(username, history, db=None):
+    """Persist history and the derived active lists for a user (reusing an open connection)."""
+    active = get_active_attrs(history)
+    variabili = [a for a in active if history[a]['type'] == 'variabile']
+    fisse = [a for a in active if history[a]['type'] == 'fisso']
+    owns = db is None
+    if owns:
+        db = get_users_db()
+    db.execute(
+        "UPDATE users SET custom_variabili = ?, custom_fisse = ?, custom_attribute_history = ? WHERE username = ?",
+        (json.dumps(variabili), json.dumps(fisse), json.dumps(history), username)
+    )
+    db.commit()
+    if owns:
+        db.close()
+
+
+def effective_month_view(sm, target_user, month):
+    """Return (columns, aligned_data_row, editable_columns) for a single month.
+
+    Columns are ordered canonically and masked to the attributes active in that
+    month; the row is realigned against the physical column order.
+    """
+    raw_var, raw_fiss, raw_hist = get_user_attr_meta(target_user)
+    history = normalize_attribute_history(raw_hist, raw_var, raw_fiss, sm.get_column_names())
+    columns = get_effective_columns(history, month)
+    data = sm.get_data_by_month(month)
+    if data:
+        phys = sm.get_column_names()
+        d = dict(zip(phys, data))
+        ordered = tuple(d.get(c, 0) for c in columns)
+    else:
+        ordered = tuple(0 for _ in columns)
+    editable = ['entrate'] + [c for c in columns if c not in ATTR_SYSTEM_COLUMNS]
+    return columns, ordered, editable
+
+
 # ─── DB helper ───
 
 def get_db():
     return SQLManager(session.get('db_path'))
 
-def ensure_month(sm, month):
-    if not sm.check_month_exists(month):
-        sm.add_month_entry(month)
+def parse_custom_lists(variabili_raw, fisse_raw, all_cols=None):
+    """Parse stored custom attribute lists, falling back to the canonical column
+    layout for legacy accounts whose lists were never persisted."""
+    try:
+        variabili = json.loads(variabili_raw or '[]')
+    except ValueError:
+        variabili = []
+    try:
+        fisse = json.loads(fisse_raw or '[]')
+    except ValueError:
+        fisse = []
 
-def get_user_attributes(sm):
-    """Get user's attribute lists from their DB."""
-    return sm.get_user_attributes()
+    # Derive canonical lists from the column layout, usable as a fallback.
+    derived_variabili, derived_fisse = [], []
+    if all_cols:
+        try:
+            iv = all_cols.index('uscite_variabili')
+            iff = all_cols.index('uscite_fisse')
+            derived_variabili = list(all_cols[2:iv])
+            derived_fisse = list(all_cols[iv + 1:iff])
+        except ValueError:
+            derived_variabili = [c for c in all_cols if c not in SQL_SYSTEM_COLUMNS]
+            derived_fisse = derived_variabili
+
+    # Fall back per-list for legacy accounts (empty stored list but columns exist).
+    if not variabili and derived_variabili:
+        variabili = derived_variabili
+    if not fisse and derived_fisse:
+        fisse = derived_fisse
+
+    return variabili, fisse
+
+def defaults_for_month(sm, month, defaults, username):
+    """Return the subset of fixed defaults valid for a given month.
+
+    Defaults apply only from the month AFTER the current real one onwards and
+    only for attributes that are active in that month (so a stale default of a
+    removed attribute never leaks into a month where the attribute is off).
+    """
+    if not defaults:
+        return None
+    if month_tuple(month) <= month_tuple(current_month_key()):
+        return None
+    raw_var, raw_fiss, raw_hist = get_user_attr_meta(username)
+    history = normalize_attribute_history(raw_hist, raw_var, raw_fiss, sm.get_column_names())
+    m_tuple = month_tuple(month)
+    applicable = {}
+    for col, val in defaults.items():
+        info = history.get(col)
+        if info and info['type'] == 'fisso' and attr_active_in(info['periods'], m_tuple):
+            applicable[col] = val
+    return applicable or None
+
+
+def sync_default_months(sm, username, defaults=None):
+    """Make fixed-expense defaults authoritative for every existing future month.
+
+    For each active fisso column (> current real month) the cell is set to the
+    current default value (or 0.0 when cleared).  A ``registro_spese`` entry with
+    ``nota='Default'`` is created, updated or removed so that defaults also appear
+    in the storico.  Columns that contain user-entered data (any registro entry
+    whose nota is *not* 'Default') are never touched.
+    """
+    if not defaults:
+        defaults = get_default_fisse_for_user(username)
+    defaults = defaults or {}
+    raw_var, raw_fiss, raw_hist = get_user_attr_meta(username)
+    history = normalize_attribute_history(raw_hist, raw_var, raw_fiss, sm.get_column_names())
+    current = current_month_key()
+    for month in sm.get_all_months():
+        if month_tuple(month) <= month_tuple(current):
+            continue
+        m_tuple = month_tuple(month)
+        active_fisse = [col for col, info in history.items()
+                        if info['type'] == 'fisso' and attr_active_in(info['periods'], m_tuple)]
+        if not active_fisse:
+            continue
+        all_entries = sm.get_expenses_for_month(month)
+        manual_cats = {e[2] for e in all_entries if e[3] != 'Default'}
+        default_entries = {e[2]: e for e in all_entries if e[3] == 'Default'}
+        year, month_name = month.split('_')
+        month_num = sm._get_month_number(month_name)
+        mese_data = f"{month_num:02d}-{year}"
+        for col in active_fisse:
+            if col in manual_cats:
+                continue
+            target = float(defaults.get(col, 0.0))
+            existing = default_entries.get(col)
+            if existing:
+                old_amt = existing[4]
+                if target == old_amt:
+                    continue
+                if target == 0:
+                    sm.cursor.execute("DELETE FROM registro_spese WHERE id = ?", (existing[0],))
+                    sm.update_value_by_attrANDmonth(month, col, 0.0)
+                else:
+                    sm.update_expense_in_registry(existing[0], 'Default', target)
+                    cur = sm.get_value_by_attrANDmonth(month, col)
+                    sm.update_value_by_attrANDmonth(month, col, round(cur + (target - old_amt), 2))
+            else:
+                if target != 0:
+                    sm.insert_expense_in_registry(col, 'Default', target, mese_data)
+                    sm.update_value_by_attrANDmonth(month, col, float(target))
+                elif float(sm.get_value_by_attrANDmonth(month, col)) != 0.0:
+                    sm.update_value_by_attrANDmonth(month, col, 0.0)
+    sm.commit()
+
+
+def ensure_month(sm, month, defaults=None, username=None):
+    applicable = defaults_for_month(sm, month, defaults, username)
+    if not sm.check_month_exists(month):
+        sm.add_month_entry(month, default_fisse=applicable)
+    sync_default_months(sm, username, defaults)
 
 
 # ─── Register all routes ───
@@ -593,7 +862,8 @@ def register_routes(app):
         db = get_users_db()
         user_info = db.execute(
             "SELECT id, username, password_hash, db_path, role, blocked, created_at, "
-            "first_name, last_name, date_of_birth, bio, profile_photo, security_question "
+            "first_name, last_name, date_of_birth, bio, profile_photo, security_question, "
+            "custom_variabili, custom_fisse, custom_default_fisse, custom_attribute_history "
             "FROM users WHERE username = ?",
             (username,)
         ).fetchone()
@@ -713,6 +983,213 @@ def register_routes(app):
                 flash("Password cambiata.", "success")
                 return redirect(url_for('profile', username=username))
 
+            elif action == 'add_attribute' and is_own:
+                attribute_name = request.form.get('attribute_name', '').strip()
+                attribute_type = request.form.get('attribute_type', '')
+
+                if not attribute_name or attribute_type not in ('variabile', 'fisso'):
+                    db.close()
+                    flash("Specifica un nome e un tipo valido.", "error")
+                    return redirect(url_for('profile', username=username))
+
+                if not attribute_name.isalnum():
+                    db.close()
+                    flash("Il nome attributo deve contenere solo lettere e numeri.", "error")
+                    return redirect(url_for('profile', username=username))
+
+                db_path = user_info[3]
+                if not os.path.isfile(db_path):
+                    db.close()
+                    flash("Database utente non trovato.", "error")
+                    return redirect(url_for('profile', username=username))
+
+                try:
+                    sm = SQLManager(db_path)
+                    all_cols = sm.get_column_names()
+                    history = normalize_attribute_history(
+                        user_info[16], user_info[13], user_info[14], all_cols)
+                    effective_from = current_month_key()
+
+                    if attribute_name in ATTR_SYSTEM_COLUMNS:
+                        raise ValueError(f"'{attribute_name}' è una colonna di sistema.")
+
+                    if attribute_name in history:
+                        if any(p[1] is None for p in history[attribute_name]['periods']):
+                            raise ValueError(f"L'attributo '{attribute_name}' è già attivo.")
+                        history[attribute_name]['periods'].append([effective_from, None])
+                        save_attribute_history(username, history, db=db)
+                        sm.close()
+                        db.close()
+                        flash("Attributo riattivato.", "success")
+                    else:
+                        if attribute_name in all_cols:
+                            raise ValueError(f"L'attributo '{attribute_name}' esiste già.")
+                        trigger_variabili = [a for a in history if history[a]['type'] == 'variabile']
+                        trigger_fisse = [a for a in history if history[a]['type'] == 'fisso']
+                        sm.add_attribute(attribute_name, attribute_type, trigger_variabili, trigger_fisse)
+                        history[attribute_name] = {'type': attribute_type, 'periods': [[effective_from, None]]}
+                        save_attribute_history(username, history, db=db)
+                        sm.close()
+                        db.close()
+                        flash("Attributo aggiunto.", "success")
+                except ValueError as e:
+                    db.close()
+                    flash(str(e), "error")
+                return redirect(url_for('profile', username=username))
+
+            elif action == 'remove_attribute' and is_own:
+                attribute_name = request.form.get('attribute_name', '').strip()
+                if not attribute_name:
+                    db.close()
+                    flash("Specifica un attributo.", "error")
+                    return redirect(url_for('profile', username=username))
+
+                db_path = user_info[3]
+                if not os.path.isfile(db_path):
+                    db.close()
+                    flash("Database utente non trovato.", "error")
+                    return redirect(url_for('profile', username=username))
+
+                try:
+                    sm = SQLManager(db_path)
+                    all_cols = sm.get_column_names()
+                    history = normalize_attribute_history(
+                        user_info[16], user_info[13], user_info[14], all_cols)
+                    effective_from = current_month_key()
+
+                    if attribute_name not in history:
+                        raise ValueError(f"L'attributo '{attribute_name}' non esiste.")
+                    hist = history[attribute_name]
+                    if not any(p[1] is None for p in hist['periods']):
+                        raise ValueError(f"L'attributo '{attribute_name}' è già disattivato.")
+
+                    active = [a for a in get_active_attrs(history) if a != attribute_name]
+                    if hist['type'] == 'variabile':
+                        if not any(history[a]['type'] == 'variabile' for a in active):
+                            raise ValueError("Devi avere almeno un attributo variabile.")
+                    else:
+                        if not any(history[a]['type'] == 'fisso' for a in active):
+                            raise ValueError("Devi avere almeno un attributo fisso.")
+
+                    sm.remove_attribute(attribute_name, effective_from)
+
+                    for p in hist['periods']:
+                        if p[1] is None:
+                            p[1] = effective_from
+
+                    defaults = json.loads(user_info[15] or '{}')
+                    if attribute_name in defaults:
+                        defaults.pop(attribute_name, None)
+                        db.execute("UPDATE users SET custom_default_fisse = ? WHERE id = ?",
+                                   (json.dumps(defaults), user_info[0]))
+
+                    save_attribute_history(username, history, db=db)
+                    sm.close()
+                    db.close()
+                    flash("Attributo rimosso.", "success")
+                except ValueError as e:
+                    db.close()
+                    flash(str(e), "error")
+                return redirect(url_for('profile', username=username))
+
+            elif action == 'reintegrate_attribute' and is_own:
+                attribute_name = request.form.get('attribute_name', '').strip()
+                if not attribute_name:
+                    db.close()
+                    flash("Specifica un attributo.", "error")
+                    return redirect(url_for('profile', username=username))
+
+                db_path = user_info[3]
+                if not os.path.isfile(db_path):
+                    db.close()
+                    flash("Database utente non trovato.", "error")
+                    return redirect(url_for('profile', username=username))
+
+                try:
+                    sm = SQLManager(db_path)
+                    all_cols = sm.get_column_names()
+                    history = normalize_attribute_history(
+                        user_info[16], user_info[13], user_info[14], all_cols)
+                    effective_from = current_month_key()
+
+                    if attribute_name not in history:
+                        raise ValueError(f"L'attributo '{attribute_name}' non esiste.")
+                    hist = history[attribute_name]
+                    if any(p[1] is None for p in hist['periods']):
+                        raise ValueError(f"L'attributo '{attribute_name}' è già attivo.")
+
+                    hist['periods'].append([effective_from, None])
+                    save_attribute_history(username, history, db=db)
+                    sm.close()
+                    db.close()
+                    flash("Attributo riattivato.", "success")
+                except ValueError as e:
+                    db.close()
+                    flash(str(e), "error")
+                return redirect(url_for('profile', username=username))
+
+            elif action == 'set_default_fisse' and is_own:
+                all_cols = []
+                history = None
+                sm = None
+                if os.path.isfile(user_info[3]):
+                    sm = SQLManager(user_info[3])
+                    all_cols = sm.get_column_names()
+                    history = normalize_attribute_history(
+                        user_info[16], user_info[13], user_info[14], all_cols)
+                active_fisse = []
+                if history is not None:
+                    active_fisse = [a for a in get_active_attrs(history)
+                                    if history[a]['type'] == 'fisso']
+                defaults = {}
+                for col in active_fisse:
+                    val = request.form.get(f'default_{col}', '').strip()
+                    if val != '':
+                        try:
+                            defaults[col] = float(val)
+                        except ValueError:
+                            pass
+                db.execute("UPDATE users SET custom_default_fisse = ? WHERE id = ?",
+                           (json.dumps(defaults), user_info[0]))
+                db.commit()
+                if sm is not None:
+                    sync_default_months(sm, username, defaults)
+                    sm.close()
+                db.close()
+                flash("Default spese fisse salvati.", "success")
+                return redirect(url_for('profile', username=username))
+
+        # Load attribute data for display (own profile)
+        profile_attributes = None
+        profile_defaults = None
+        removed_attributes = []
+        effective_from = None
+        if is_own:
+            all_cols = []
+            if os.path.isfile(user_info[3]):
+                sm = SQLManager(user_info[3])
+                all_cols = sm.get_column_names()
+                sm.close()
+            try:
+                profile_defaults = json.loads(user_info[15] or '{}')
+            except ValueError:
+                profile_defaults = {}
+
+            history = normalize_attribute_history(
+                user_info[16], user_info[13], user_info[14], all_cols)
+            active = get_active_attrs(history)
+            effective_from = current_month_key()
+
+            profile_attributes = {
+                'variabili': [a for a in active if history[a]['type'] == 'variabile'],
+                'fisse': [a for a in active if history[a]['type'] == 'fisso'],
+                'system': [c for c in all_cols if c in ATTR_SYSTEM_COLUMNS],
+            }
+            removed_attributes = [
+                {'name': a, 'type': history[a]['type'], 'periods': history[a]['periods']}
+                for a in get_removed_attrs(history)
+            ]
+        
         user_groups = db.execute("""
             SELECT g.id, g.name, g.description,
                 CASE WHEN g.created_by = ? THEN 'Creatore' ELSE 'Membro' END,
@@ -756,6 +1233,10 @@ def register_routes(app):
         db.close()
         return render_template('user_profile.html', user_info=user_info, is_own=is_own,
                                user_groups=user_groups, group_members_map=group_members_map,
+                               profile_attributes=profile_attributes,
+                               profile_defaults=profile_defaults,
+                               removed_attributes=removed_attributes,
+                               effective_from=effective_from,
                                current_year=session.get('year'))
 
 
@@ -901,6 +1382,7 @@ def register_routes(app):
 
         visible_users = get_visible_users()
         year = session.get('year')
+        default_fisse = get_default_fisse_for_user(target_user)
 
         now = datetime.now()
         month_num = now.month
@@ -922,13 +1404,12 @@ def register_routes(app):
                     month = f"{year}_{month_name}"
 
             if action == 'select_month':
-                ensure_month(sm, month)
-                data = sm.get_data_by_month(month)
-                attrs = get_user_attributes(sm)
+                ensure_month(sm, month, defaults=default_fisse, username=target_user)
+                columns, ordered, editable = effective_month_view(sm, target_user, month)
                 return render_template('add_expense.html', month=month,
-                    month_name=month_name, month_num=month_num, data_row=data,
+                    month_name=month_name, month_num=month_num, data_row=ordered,
                     visible_users=visible_users, target_user=target_user,
-                    user_columns=attrs['all'], user_editable=attrs['editable'],
+                    user_columns=columns, user_editable=editable,
                     current_year=year)
 
             if action == 'add':
@@ -969,13 +1450,12 @@ def register_routes(app):
                         month_num = num
                         break
 
-        ensure_month(sm, month)
-        data = sm.get_data_by_month(month)
-        attrs = get_user_attributes(sm)
+        ensure_month(sm, month, defaults=default_fisse, username=target_user)
+        columns, ordered, editable = effective_month_view(sm, target_user, month)
         return render_template('add_expense.html', month=month,
-            month_name=month_name, month_num=month_num, data_row=data,
+            month_name=month_name, month_num=month_num, data_row=ordered,
             visible_users=visible_users, target_user=target_user,
-            user_columns=attrs['all'], user_editable=attrs['editable'],
+            user_columns=columns, user_editable=editable,
             current_year=year)
 
 
@@ -1011,18 +1491,26 @@ def register_routes(app):
 
         months_data = sm.get_months_data(selected)
         sorted_months = [m for m in all_sorted if m in selected]
-        user_columns = sm.get_column_names()
+        raw_var, raw_fiss, raw_hist = get_user_attr_meta(target_user)
+        history = normalize_attribute_history(raw_hist, raw_var, raw_fiss, sm.get_column_names())
+        user_columns = get_canonical_columns(history)
+        phys = sm.get_column_names()
 
         rows = []
-        for attr_idx, attr in enumerate(user_columns):
+        for attr in user_columns:
             if attr == 'mese':
                 continue
+            is_user_attr = attr in history
             values = []
             for m in sorted_months:
                 row = months_data.get(m)
-                if row and row[attr_idx] is not None:
-                    v = round(float(row[attr_idx]), 2)
-                    values.append(v)
+                if not row:
+                    continue
+                d = dict(zip(phys, row))
+                visible = (not is_user_attr) or attr_active_in(history[attr]['periods'], month_tuple(m))
+                val = d.get(attr)
+                if visible and val is not None:
+                    values.append(round(float(val), 2))
             if values:
                 mean = round(sum(values) / len(values), 2)
                 pct = None
@@ -1040,13 +1528,15 @@ def register_routes(app):
             month_labels.append(f"{mn.capitalize()} {y}")
             month_short_labels.append(mn[:3].capitalize())
 
-        attrs = get_user_attributes(sm)
+        active = get_active_attrs(history)
+        user_variabili = [a for a in active if history[a]['type'] == 'variabile']
+        user_fisse = [a for a in active if history[a]['type'] == 'fisso']
         return render_template('comparison.html', months=all_sorted,
             selected=selected, sorted_months=sorted_months,
             rows=rows, month_labels=month_labels,
             month_short_labels=month_short_labels,
             visible_users=visible_users, target_user=target_user,
-            user_variabili=attrs['variabili'], user_fisse=attrs['fisse'],
+            user_variabili=user_variabili, user_fisse=user_fisse,
             active_view='comparison', current_year=year)
 
 
@@ -1069,18 +1559,23 @@ def register_routes(app):
         all_sorted = sm.get_months_list(year)
 
         all_months_data = sm.get_months_data(all_sorted)
-        user_columns = sm.get_column_names()
-        trackable_attrs = [a for a in user_columns if a != 'mese']
+        raw_var, raw_fiss, raw_hist = get_user_attr_meta(target_user)
+        history = normalize_attribute_history(raw_hist, raw_var, raw_fiss, sm.get_column_names())
+        trackable_attrs = [a for a in get_canonical_columns(history) if a != 'mese']
         tracking_data = {}
+        phys = sm.get_column_names()
         for attr in trackable_attrs:
-            attr_idx = user_columns.index(attr)
+            is_user_attr = attr in history
             values = []
             for m in all_sorted:
                 row = all_months_data.get(m)
-                if row and row[attr_idx] is not None:
-                    values.append(round(float(row[attr_idx]), 2))
-                else:
-                    values.append(None)
+                val = None
+                if row:
+                    d = dict(zip(phys, row))
+                    visible = (not is_user_attr) or attr_active_in(history[attr]['periods'], month_tuple(m))
+                    if visible and d.get(attr) is not None:
+                        val = round(float(d[attr]), 2)
+                values.append(val)
             tracking_data[attr] = values
 
         all_month_labels = []
@@ -1148,7 +1643,7 @@ def register_routes(app):
             else:
                 entries = sm.get_registro_entries(start, end)
                 for e in entries:
-                    m = e[1][:7]
+                    m = e[5][3:7] + '-' + e[5][0:2]
                     month_counts[m] = month_counts.get(m, 0) + 1
         elif request.method == 'GET':
             start_raw = request.args.get('start_date', '').strip()
@@ -1158,7 +1653,7 @@ def register_routes(app):
                 end = parse_date_bound(end_raw, "end")
                 entries = sm.get_registro_entries(start, end)
                 for e in entries:
-                    m = e[1][:7]
+                    m = e[5][3:7] + '-' + e[5][0:2]
                     month_counts[m] = month_counts.get(m, 0) + 1
 
         return render_template('show_history.html',
@@ -1208,7 +1703,7 @@ def register_routes(app):
             month_num = int(data[:2])
             month_year = data[3:]
             month_key = f"{month_year}_{MONTHS_INDEX[month_num]}"
-            ensure_month(sm, month_key)
+            ensure_month(sm, month_key, defaults=get_default_fisse_for_user(target_user), username=target_user)
             current_val = sm.get_value_by_attrANDmonth(month_key, old_categoria)
             delta = new_importo - old_importo
             sm.update_value_by_attrANDmonth(month_key, old_categoria, round(current_val + delta, 2))
@@ -1254,7 +1749,7 @@ def register_routes(app):
         month_num = int(data[:2])
         month_year = data[3:]
         month_key = f"{month_year}_{MONTHS_INDEX[month_num]}"
-        ensure_month(sm, month_key)
+        ensure_month(sm, month_key, defaults=get_default_fisse_for_user(target_user), username=target_user)
         cur_val = sm.get_value_by_attrANDmonth(month_key, category)
         sm.update_value_by_attrANDmonth(month_key, category, round(cur_val - amount, 2))
 

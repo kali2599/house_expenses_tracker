@@ -144,6 +144,7 @@
 <div id="panel-breakdown" class="tab-panel">
   {% for m in sorted_months %}
   {% set midx = loop.index0 %}
+  {% set ut_row = rows | selectattr(0, 'equalto', 'uscite_totali') | first %}
   <div class="breakdown-card">
     <h3>{{ month_labels[midx] }}</h3>
     <div class="breakdown-grid">
@@ -153,6 +154,10 @@
         <tr class="{{ get_color_for_attribute(attr, values[midx]) }}">
           <td>{{ attr }}</td>
           <td class="r">{{ "%.1f"|format(values[midx]) }}</td>
+          <td class="r pct-of-total">
+            {%- if attr not in ('entrate','uscite_totali','delta') and ut_row and ut_row[1][midx] != 0 %}{{ "%.1f"|format(values[midx] / ut_row[1][midx] * 100) }}%
+            {%- else %}—{% endif -%}
+          </td>
         </tr>
         {% endfor %}
       </table>
@@ -178,7 +183,8 @@
         {% for attr, values, mean, pct in rows %}
         <tr>
           <td class="{{ get_color_for_attribute(attr) }}">{{ attr }}</td>
-          <td class="trend-cell">
+          <td class="trend-cell
+{%- if attr == 'entrate' %}{% if pct is not none and pct > 1 %} trend-up-entrate{% elif pct is not none and pct < -1 %} trend-down-entrate{% endif %}{% else %}{% if pct is not none and pct > 1 %} trend-up{% elif pct is not none and pct < -1 %} trend-down{% endif %}{% endif %}">
             {%- if pct is not none and pct > 1 %}↗
             {%- elif pct is not none and pct < -1 %}↘
             {%- else %}→

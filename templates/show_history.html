@@ -80,12 +80,12 @@
     </tr>
     {% set ns = namespace(prev_month=None) %}
     {% for entry in entries %}
-    {% set cur_month = entry[1][:7] %}
+    {% set cur_month = entry[5][3:7] + '-' + entry[5][0:2] %}
     {% if cur_month != ns.prev_month %}
     <tr class="month-header">
-      <td colspan="7">
-        {% set month_num = entry[1][5:7] | int %}
-        {{ entry[1][:4] }} {{ MONTHS_INDEX[month_num] }} ({{ month_counts[cur_month] }})
+      <td colspan="7" data-month-key="{{ cur_month }}">
+        {% set month_num = entry[5][0:2] | int %}
+        {{ entry[5][3:7] }} {{ MONTHS_INDEX[month_num] }} ({{ month_counts[cur_month] }})<span class="month-matched"></span>
       </td>
     </tr>
     {% set ns.prev_month = cur_month %}
@@ -103,6 +103,11 @@
       </td>
     </tr>
     {% endfor %}
+    <tr id="search-summary" style="display:none">
+      <td colspan="5" style="text-align:right;font-weight:600">Trovate: <span id="summary-count">0</span> spese</td>
+      <td data-col="amount" style="font-weight:700">€ <span id="summary-total">0.00</span></td>
+      <td data-col="azione"></td>
+    </tr>
   </table>
   {% else %}
   <p>No entries found.</p>
@@ -133,24 +138,78 @@ function applyFilters() {
   var activeCats = [];
   chips.forEach(function(c) { activeCats.push(c.getAttribute('data-cat')); });
   var filterCat = activeCats.length > 0;
+  var hasFilter = query.length > 0 || filterCat;
   var rows = document.querySelectorAll('.history-table tr');
+  var totalMatched = 0;
+  var totalAmount = 0;
+  var currentHeader = null;
+  var headerMatchCount = 0;
+
   rows.forEach(function(row) {
-    if (row.classList.contains('month-header')) return;
-    var catCell = row.querySelector('td[data-col="category"]');
-    var noteCell = row.querySelector('td[data-col="note"]');
-    if (!catCell) return;
-    var cat = catCell.textContent.trim();
-    var note = noteCell ? noteCell.textContent.toLowerCase() : '';
-    var catOk = !filterCat || activeCats.indexOf(cat) !== -1;
-    var noteOk = !query || note.indexOf(query) !== -1;
-    if (catOk && noteOk) {
-      row.classList.toggle('row-match', query.length > 0);
-      row.style.display = '';
+    if (row.classList.contains('month-header')) {
+      if (currentHeader) {
+        var span = currentHeader.querySelector('td .month-matched');
+        if (span) {
+          if (hasFilter && headerMatchCount > 0) {
+            span.textContent = ' — ' + headerMatchCount + ' trovate';
+            span.style.display = '';
+          } else {
+            span.textContent = '';
+            span.style.display = 'none';
+          }
+        }
+      }
+      currentHeader = row;
+      headerMatchCount = 0;
+    } else if (row.id === 'search-summary') {
+      return;
     } else {
-      row.classList.remove('row-match');
-      row.style.display = 'none';
+      var catCell = row.querySelector('td[data-col="category"]');
+      var noteCell = row.querySelector('td[data-col="note"]');
+      if (!catCell) return;
+      var cat = catCell.textContent.trim();
+      var note = noteCell ? noteCell.textContent.toLowerCase() : '';
+      var catOk = !filterCat || activeCats.indexOf(cat) !== -1;
+      var noteOk = !query || note.indexOf(query) !== -1;
+      if (catOk && noteOk) {
+        row.classList.toggle('row-match', query.length > 0);
+        row.style.display = '';
+        headerMatchCount++;
+        totalMatched++;
+        var amountCell = row.querySelector('td[data-col="amount"]');
+        if (amountCell) {
+          totalAmount += parseFloat(amountCell.textContent) || 0;
+        }
+      } else {
+        row.classList.remove('row-match');
+        row.style.display = 'none';
+      }
     }
   });
+
+  if (currentHeader) {
+    var span = currentHeader.querySelector('td .month-matched');
+    if (span) {
+      if (hasFilter && headerMatchCount > 0) {
+        span.textContent = ' — ' + headerMatchCount + ' trovate';
+        span.style.display = '';
+      } else {
+        span.textContent = '';
+        span.style.display = 'none';
+      }
+    }
+  }
+
+  var summary = document.getElementById('search-summary');
+  if (summary) {
+    if (hasFilter) {
+      document.getElementById('summary-count').textContent = totalMatched;
+      document.getElementById('summary-total').textContent = totalAmount.toFixed(2);
+      summary.style.display = '';
+    } else {
+      summary.style.display = 'none';
+    }
+  }
 }
 
 function editRow(btn, id, nota, amount) {

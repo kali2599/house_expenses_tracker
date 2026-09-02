@@ -60,15 +60,31 @@ class SQLManager:
         return data > 0
     
 
-    def add_month_entry(self, month):
-        columns_info = self.cursor.execute("PRAGMA table_info(spese_mensili)").fetchall()  
-        columns = [col[1] for col in columns_info]  
+    def add_month_entry(self, month, default_fisse=None):
+        columns_info = self.cursor.execute("PRAGMA table_info(spese_mensili)").fetchall()
+        columns = [col[1] for col in columns_info]
         columns_str = ', '.join(columns)
         placeholders = ', '.join(['?'] * len(columns))
-        values = (month,) + tuple([0] * (len(columns) - 1))
+        default_fisse = default_fisse or {}
+        values = [month]
+        for col in columns[1:]:
+            if col in default_fisse:
+                try:
+                    values.append(float(default_fisse[col]))
+                except (TypeError, ValueError):
+                    values.append(0.0)
+            else:
+                values.append(0)
         query = f"INSERT INTO spese_mensili ({columns_str}) VALUES ({placeholders})"
-        self.cursor.execute(query, values)
-        self.commit()  
+        self.cursor.execute(query, tuple(values))
+        if default_fisse:
+            year, month_name = month.split('_')
+            month_num = self._get_month_number(month_name)
+            mese_data = f"{month_num:02d}-{year}"
+            for col, val in default_fisse.items():
+                if val and float(val) != 0.0:
+                    self.insert_expense_in_registry(col, 'Default', float(val), mese_data)
+        self.commit()
 
 
     def commit(self):
@@ -196,6 +212,149 @@ class SQLManager:
             (new_nota, new_importo, expense_id)
         )
         return old_categoria, old_importo, data
+
+
+    def _drop_all_triggers(self):
+        """Drop all computed-column triggers for spese_mensili."""
+        for name in ['update_uscite_variabili', 'update_uscite_fisse',
+                     'update_uscite_totali', 'update_delta']:
+            self.cursor.execute(f"DROP TRIGGER IF EXISTS {name}")
+
+
+    def _recreate_triggers(self, variabili, fisse):
+        """Recreate the computed-column triggers with the provided attribute lists."""
+        self._drop_all_triggers()
+        variabili_update = ' + '.join([f'(new."{v}" - old."{v}")' for v in variabili])
+        fisse_update = ' + '.join([f'(new."{f}" - old."{f}")' for f in fisse])
+        variabili_trigger_cols = ', '.join(variabili)
+        fisse_trigger_cols = ', '.join(fisse)
+
+        self.cursor.executescript(f"""
+CREATE TRIGGER update_uscite_variabili AFTER UPDATE OF {variabili_trigger_cols}
+ON spese_mensili
+FOR EACH ROW
+BEGIN
+UPDATE spese_mensili
+SET uscite_variabili = ROUND(uscite_variabili + {variabili_update}, 1)
+WHERE mese = old.mese;
+END;
+
+CREATE TRIGGER update_uscite_fisse AFTER UPDATE OF {fisse_trigger_cols}
+ON spese_mensili
+FOR EACH ROW
+BEGIN
+UPDATE spese_mensili
+SET uscite_fisse = ROUND(uscite_fisse + {fisse_update}, 1)
+WHERE mese = old.mese;
+END;
+
+CREATE TRIGGER update_uscite_totali AFTER UPDATE OF uscite_variabili, uscite_fisse
+ON spese_mensili
+FOR EACH ROW
+BEGIN
+UPDATE spese_mensili
+SET uscite_totali = ROUND(uscite_totali + (new.uscite_variabili - old.uscite_variabili) + (new.uscite_fisse - old.uscite_fisse), 1)
+WHERE mese = old.mese;
+END;
+
+CREATE TRIGGER update_delta AFTER UPDATE OF uscite_totali, entrate
+ON spese_mensili
+FOR EACH ROW
+BEGIN
+UPDATE spese_mensili
+SET delta = ROUND(entrate - uscite_totali, 1)
+WHERE mese = old.mese;
+END;
+""")
+        self.commit()
+
+
+    def add_attribute(self, name, attr_type, variabili, fisse):
+        """Add a new variabile or fisso column and recreate triggers."""
+        name = name.strip()
+        columns = self.get_column_names()
+        system = set(['mese', 'entrate', 'uscite_variabili', 'uscite_fisse',
+                      'uscite_totali', 'delta'])
+        if not name:
+            raise ValueError("Nome attributo vuoto.")
+        if name in columns:
+            raise ValueError(f"L'attributo '{name}' esiste già.")
+        if name in system:
+            raise ValueError(f"'{name}' è una colonna di sistema.")
+
+        self.cursor.execute(f'ALTER TABLE spese_mensili ADD COLUMN "{name}" REAL DEFAULT 0')
+
+        if attr_type == 'variabile':
+            variabili.append(name)
+        else:
+            fisse.append(name)
+        self._recreate_triggers(variabili, fisse)
+        self.commit()
+
+
+    def remove_attribute(self, name, from_month=None):
+        """Deactivate a variabile or fisso column from a month onward.
+
+        The column is never dropped (past data must be preserved). It is zeroed
+        in every existing month >= from_month so trigger-maintained totals
+        (uscite_fisse/variabili/totali/delta) remain consistent.
+        """
+        name = name.strip()
+        columns = self.get_column_names()
+        system = set(['mese', 'entrate', 'uscite_variabili', 'uscite_fisse',
+                      'uscite_totali', 'delta'])
+        if name in system:
+            raise ValueError(f"'{name}' è una colonna di sistema e non può essere rimossa.")
+        if name not in columns:
+            raise ValueError(f"L'attributo '{name}' non esiste.")
+
+        if from_month:
+            affected = [m for m in self.get_all_months() if self._month_tuple(m) >= self._month_tuple(from_month)]
+            if affected:
+                placeholders = ', '.join(['?'] * len(affected))
+                self.cursor.execute(
+                    f'UPDATE spese_mensili SET "{name}" = 0 WHERE mese IN ({placeholders})',
+                    tuple(affected)
+                )
+                self.commit()
+
+
+    def get_all_months(self):
+        """Return every month key present in spese_mensili, no ordering guarantee."""
+        return [r[0] for r in self.cursor.execute("SELECT mese FROM spese_mensili").fetchall()]
+
+
+    def month_is_pristine(self, month):
+        """A month is pristine if its row is all zeros and no expenses were ever recorded for it."""
+        row = self.get_data_by_month(month)
+        if not row:
+            return True
+        columns = self.get_column_names()
+        for col, val in zip(columns[1:], row[1:]):
+            if val not in (None, 0, 0.0):
+                return False
+        year, month_name = month.split('_')
+        month_num = self._get_month_number(month_name)
+        mese_data = f"{month_num:02d}-{year}"
+        count = self.cursor.execute(
+            "SELECT COUNT(*) FROM registro_spese WHERE data = ?", (mese_data,)
+        ).fetchone()[0]
+        return count == 0
+
+
+    @staticmethod
+    def _month_tuple(key):
+        """Convert a 'YYYY_MESE' month key into a sortable (year, month_number) tuple."""
+        m = key.split('_')
+        if len(m) != 2:
+            return (0, 0)
+        year, month_name = m
+        months_map = {
+            'GENNAIO': 1, 'FEBBRAIO': 2, 'MARZO': 3, 'APRILE': 4,
+            'MAGGIO': 5, 'GIUGNO': 6, 'LUGLIO': 7, 'AGOSTO': 8,
+            'SETTEMBRE': 9, 'OTTOBRE': 10, 'NOVEMBRE': 11, 'DICEMBRE': 12
+        }
+        return (int(year), months_map.get(month_name.upper(), 0))
 
 
 def generate_user_db_sql(variabili, fisse):

@@ -28,7 +28,7 @@
     <div class="track-month-list">
       {% for m in months %}
       {% set parts = m.split('_') %}
-      <span class="track-month-item selected" data-month-idx="{{ loop.index0 }}" onclick="toggleTrackingMonth(this)">{{ parts[1][:3]|capitalize }}</span>
+      <span class="track-month-item" data-month-idx="{{ loop.index0 }}" onclick="toggleTrackingMonth(this)">{{ parts[1][:3]|capitalize }}</span>
       {% endfor %}
     </div>
   </div>
@@ -58,7 +58,6 @@ var TRACK_PALETTE = ['#2563eb','#dc2626','#059669','#d97706','#7c3aed','#0891b2'
 var trackingChart = null;
 var selectedAttrs = [];
 var selectedMonthIndices = [];
-for (var i = 0; i < TRACK_MONTHS.length; i++) selectedMonthIndices.push(i);
 
 function toggleTrackingAttr(el) {
   var attr = el.getAttribute('data-attr');

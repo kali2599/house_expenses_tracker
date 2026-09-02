@@ -121,6 +121,108 @@
         <button type="submit" style="margin-top:12px">Cambia password</button>
       </form>
     </div>
+
+    {% if profile_attributes %}
+    <div class="card">
+      <h3 style="margin:0 0 14px">Gestione attributi</h3>
+      <p style="font-size:0.85em;color:#64748b;margin:0 0 12px">Personalizza le categorie di spesa del tuo database. Aggiunte, rimozioni e riattivazioni valgono dal mese corrente ({{ effective_from or '—' }}).</p>
+
+      <label style="font-weight:600">Variabili</label>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 14px">
+        {% for attr in profile_attributes['variabili'] %}
+        <span class="attr-chip attr-variabile">
+          {{ attr }}
+          {% if profile_attributes['variabili']|length > 1 %}
+          <form method="post" action="/profile" style="display:inline;margin-left:4px"
+                onsubmit="return confirm('Rimuovere questo attributo? Non sarà più usato dal mese corrente.')">
+            <input type="hidden" name="action" value="remove_attribute">
+            <input type="hidden" name="attribute_name" value="{{ attr }}">
+            <button type="submit" class="chip-remove" title="Rimuovi">&times;</button>
+          </form>
+          {% endif %}
+        </span>
+        {% endfor %}
+      </div>
+
+      <label style="font-weight:600">Fissi</label>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 14px">
+        {% for attr in profile_attributes['fisse'] %}
+        <span class="attr-chip attr-fisse">
+          {{ attr }}
+          {% if profile_attributes['fisse']|length > 1 %}
+          <form method="post" action="/profile" style="display:inline;margin-left:4px"
+                onsubmit="return confirm('Rimuovere questo attributo? Non sarà più usato dal mese corrente.')">
+            <input type="hidden" name="action" value="remove_attribute">
+            <input type="hidden" name="attribute_name" value="{{ attr }}">
+            <button type="submit" class="chip-remove" title="Rimuovi">&times;</button>
+          </form>
+          {% endif %}
+        </span>
+        {% endfor %}
+      </div>
+
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px">
+        <label style="font-weight:600">Aggiungi attributo</label>
+        <form method="post" action="/profile" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:6px">
+          <input type="hidden" name="action" value="add_attribute">
+          <div style="flex:1;min-width:160px">
+            <label>Nome (solo lettere e numeri)</label>
+            <input type="text" name="attribute_name" placeholder="es. cinema">
+          </div>
+          <div style="min-width:130px">
+            <label>Tipo</label>
+            <select name="attribute_type" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:6px">
+              <option value="variabile">Variabile</option>
+              <option value="fisso">Fisso</option>
+            </select>
+          </div>
+          <button type="submit">Aggiungi</button>
+        </form>
+      </div>
+
+      {% if removed_attributes %}
+      <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px;margin-top:14px">
+        <label style="font-weight:600">Attributi rimossi</label>
+        <p style="font-size:0.85em;color:#9a3412;margin:4px 0 10px">Disattivati da {{ effective_from or 'un mese precedente' }}. I dati storici restano invariati. Puoi riattivarli quando vuoi.</p>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          {% for attr in removed_attributes %}
+          <span class="attr-chip" style="opacity:0.75;text-decoration:line-through">
+            {{ attr.name }}
+            {% if attr.type == 'variabile' %}<span style="margin-left:4px;font-size:0.7em;color:#64748b">variabile</span>{% else %}<span style="margin-left:4px;font-size:0.7em;color:#64748b">fisso</span>{% endif %}
+            <form method="post" action="/profile" style="display:inline;margin-left:6px"
+                onsubmit="return confirm('Riattivare questo attributo dal mese corrente?')">
+              <input type="hidden" name="action" value="reintegrate_attribute">
+              <input type="hidden" name="attribute_name" value="{{ attr.name }}">
+              <button type="submit" class="chip-remove" title="Riattiva" style="text-decoration:none">&#x21bb;</button>
+            </form>
+          </span>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if profile_attributes and profile_attributes['fisse'] %}
+    <div class="card">
+      <h3 style="margin:0 0 6px">Default spese fisse</h3>
+      <p style="font-size:0.85em;color:#64748b;margin:0 0 12px">Dal mese successivo a quello corrente, i mesi non ancora compilati vengono precompilati con questi valori al primo accesso.</p>
+      <form method="post" action="/profile">
+        <input type="hidden" name="action" value="set_default_fisse">
+        <div class="form-grid">
+          {% for attr in profile_attributes['fisse'] %}
+          <div>
+            <label>{{ attr }}</label>
+            <input type="number" step="0.01" min="0" name="default_{{ attr }}"
+                   value="{{ profile_defaults.get(attr, '') if profile_defaults else '' }}"
+                   placeholder="0.00">
+          </div>
+          {% endfor %}
+        </div>
+        <button type="submit" style="margin-top:14px">Salva default</button>
+      </form>
+    </div>
+    {% endif %}
     {% else %}
     <div class="card">
       <p style="color:#64748b">Stai visualizzando il profilo di <strong>{{ user_info[1] }}</strong>.</p>

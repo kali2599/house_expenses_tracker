@@ -34,7 +34,8 @@ def init_app():
                  "date_of_birth TEXT DEFAULT ''", "bio TEXT DEFAULT ''",
                  "profile_photo TEXT DEFAULT ''", "security_question TEXT DEFAULT ''",
                  "security_answer_hash TEXT DEFAULT ''",
-                 "custom_variabili TEXT DEFAULT ''", "custom_fisse TEXT DEFAULT ''"]:
+                 "custom_variabili TEXT DEFAULT ''", "custom_fisse TEXT DEFAULT ''",
+                 "custom_default_fisse TEXT DEFAULT ''", "custom_attribute_history TEXT DEFAULT ''"]:
         try:
             db.execute(f"ALTER TABLE users ADD COLUMN {col}")
         except sqlite3.OperationalError:
