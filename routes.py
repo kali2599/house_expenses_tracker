@@ -125,6 +125,19 @@ def get_default_fisse_for_user(username):
         return None
 
 
+def get_default_note_for_user(username):
+    """Return the dict of per-attribute default notes for a given username."""
+    db = get_users_db()
+    row = db.execute("SELECT custom_default_fisse_notes FROM users WHERE username = ?", (username,)).fetchone()
+    db.close()
+    if not row or not row[0]:
+        return {}
+    try:
+        return json.loads(row[0])
+    except ValueError:
+        return {}
+
+
 def get_user_attr_meta(username):
     """Return (custom_variabili, custom_fisse, custom_attribute_history) for a user."""
     db = get_users_db()
@@ -339,13 +352,14 @@ def sync_default_months(sm, username, defaults=None):
 
     For each active fisso column (> current real month) the cell is set to the
     current default value (or 0.0 when cleared).  A ``registro_spese`` entry with
-    ``nota='Default'`` is created, updated or removed so that defaults also appear
+    ``is_default=1`` is created, updated or removed so that defaults also appear
     in the storico.  Columns that contain user-entered data (any registro entry
-    whose nota is *not* 'Default') are never touched.
+    with ``is_default=0``) are never touched.
     """
     if not defaults:
         defaults = get_default_fisse_for_user(username)
     defaults = defaults or {}
+    notes = get_default_note_for_user(username)
     raw_var, raw_fiss, raw_hist = get_user_attr_meta(username)
     history = normalize_attribute_history(raw_hist, raw_var, raw_fiss, sm.get_column_names())
     current = current_month_key()
@@ -358,8 +372,8 @@ def sync_default_months(sm, username, defaults=None):
         if not active_fisse:
             continue
         all_entries = sm.get_expenses_for_month(month)
-        manual_cats = {e[2] for e in all_entries if e[3] != 'Default'}
-        default_entries = {e[2]: e for e in all_entries if e[3] == 'Default'}
+        manual_cats = {e[2] for e in all_entries if not e[6]}
+        default_entries = {e[2]: e for e in all_entries if e[6]}
         year, month_name = month.split('_')
         month_num = sm._get_month_number(month_name)
         mese_data = f"{month_num:02d}-{year}"
@@ -367,21 +381,22 @@ def sync_default_months(sm, username, defaults=None):
             if col in manual_cats:
                 continue
             target = float(defaults.get(col, 0.0))
+            note = notes.get(col, 'Default')
             existing = default_entries.get(col)
             if existing:
                 old_amt = existing[4]
-                if target == old_amt:
+                if target == old_amt and existing[3] == note:
                     continue
                 if target == 0:
                     sm.cursor.execute("DELETE FROM registro_spese WHERE id = ?", (existing[0],))
                     sm.update_value_by_attrANDmonth(month, col, 0.0)
                 else:
-                    sm.update_expense_in_registry(existing[0], 'Default', target)
+                    sm.update_expense_in_registry(existing[0], note, target)
                     cur = sm.get_value_by_attrANDmonth(month, col)
                     sm.update_value_by_attrANDmonth(month, col, round(cur + (target - old_amt), 2))
             else:
                 if target != 0:
-                    sm.insert_expense_in_registry(col, 'Default', target, mese_data)
+                    sm.insert_expense_in_registry(col, note, target, mese_data, is_default=1)
                     sm.update_value_by_attrANDmonth(month, col, float(target))
                 elif float(sm.get_value_by_attrANDmonth(month, col)) != 0.0:
                     sm.update_value_by_attrANDmonth(month, col, 0.0)
@@ -391,7 +406,8 @@ def sync_default_months(sm, username, defaults=None):
 def ensure_month(sm, month, defaults=None, username=None):
     applicable = defaults_for_month(sm, month, defaults, username)
     if not sm.check_month_exists(month):
-        sm.add_month_entry(month, default_fisse=applicable)
+        notes = get_default_note_for_user(username) if username else {}
+        sm.add_month_entry(month, default_fisse=applicable, default_notes=notes)
     sync_default_months(sm, username, defaults)
 
 
@@ -863,7 +879,8 @@ def register_routes(app):
         user_info = db.execute(
             "SELECT id, username, password_hash, db_path, role, blocked, created_at, "
             "first_name, last_name, date_of_birth, bio, profile_photo, security_question, "
-            "custom_variabili, custom_fisse, custom_default_fisse, custom_attribute_history "
+            "custom_variabili, custom_fisse, custom_default_fisse, custom_attribute_history, "
+            "custom_default_fisse_notes "
             "FROM users WHERE username = ?",
             (username,)
         ).fetchone()
@@ -1142,6 +1159,7 @@ def register_routes(app):
                     active_fisse = [a for a in get_active_attrs(history)
                                     if history[a]['type'] == 'fisso']
                 defaults = {}
+                notes = {}
                 for col in active_fisse:
                     val = request.form.get(f'default_{col}', '').strip()
                     if val != '':
@@ -1149,8 +1167,11 @@ def register_routes(app):
                             defaults[col] = float(val)
                         except ValueError:
                             pass
-                db.execute("UPDATE users SET custom_default_fisse = ? WHERE id = ?",
-                           (json.dumps(defaults), user_info[0]))
+                    note = request.form.get(f'note_{col}', '').strip()
+                    if note:
+                        notes[col] = note
+                db.execute("UPDATE users SET custom_default_fisse = ?, custom_default_fisse_notes = ? WHERE id = ?",
+                           (json.dumps(defaults), json.dumps(notes), user_info[0]))
                 db.commit()
                 if sm is not None:
                     sync_default_months(sm, username, defaults)
@@ -1162,6 +1183,7 @@ def register_routes(app):
         # Load attribute data for display (own profile)
         profile_attributes = None
         profile_defaults = None
+        profile_notes = None
         removed_attributes = []
         effective_from = None
         if is_own:
@@ -1174,6 +1196,10 @@ def register_routes(app):
                 profile_defaults = json.loads(user_info[15] or '{}')
             except ValueError:
                 profile_defaults = {}
+            try:
+                profile_notes = json.loads(user_info[17] or '{}')
+            except ValueError:
+                profile_notes = {}
 
             history = normalize_attribute_history(
                 user_info[16], user_info[13], user_info[14], all_cols)
@@ -1235,6 +1261,7 @@ def register_routes(app):
                                user_groups=user_groups, group_members_map=group_members_map,
                                profile_attributes=profile_attributes,
                                profile_defaults=profile_defaults,
+                               profile_notes=profile_notes,
                                removed_attributes=removed_attributes,
                                effective_from=effective_from,
                                current_year=session.get('year'))

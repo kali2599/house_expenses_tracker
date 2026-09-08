@@ -7,3 +7,4 @@ venv/
 flask_secret.key
 data/users.db
 data/user_data/
+backups/

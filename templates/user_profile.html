@@ -216,6 +216,9 @@
             <input type="number" step="0.01" min="0" name="default_{{ attr }}"
                    value="{{ profile_defaults.get(attr, '') if profile_defaults else '' }}"
                    placeholder="0.00">
+            <input type="text" name="note_{{ attr }}"
+                   value="{{ profile_notes.get(attr, '') if profile_notes else '' }}"
+                   placeholder="Nota" style="margin-top:4px">
           </div>
           {% endfor %}
         </div>

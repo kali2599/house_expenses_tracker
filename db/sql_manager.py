@@ -7,6 +7,18 @@ class SQLManager:
     def __init__(self, database):
         self.conn = sqlite3.connect(database)
         self.cursor = self.conn.cursor()
+        table = self.cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='registro_spese'"
+        ).fetchone()
+        if table:
+            try:
+                self.cursor.execute("ALTER TABLE registro_spese ADD COLUMN is_default INTEGER DEFAULT 0")
+            except sqlite3.OperationalError:
+                pass
+            self.cursor.execute(
+                "UPDATE registro_spese SET is_default = 1 WHERE nota = 'Default' AND is_default = 0"
+            )
+            self.conn.commit()
 
 
     def _validate_attribute(self, attribute):
@@ -50,9 +62,12 @@ class SQLManager:
         self.cursor.execute(f"UPDATE spese_mensili SET {attribute} = ? WHERE mese = ?", (new_value, month))
 
 
-    def insert_expense_in_registry(self, category, nota, amount, mese_data=None):
+    def insert_expense_in_registry(self, category, nota, amount, mese_data=None, is_default=0):
         ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        self.cursor.execute("INSERT INTO registro_spese (timestamp, categoria, nota, importo, data) VALUES (?, ?, ?, ?, ?)", (ts, category, nota, amount, mese_data))
+        self.cursor.execute(
+            "INSERT INTO registro_spese (timestamp, categoria, nota, importo, data, is_default) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (ts, category, nota, amount, mese_data, is_default))
 
 
     def check_month_exists(self, month) -> bool:
@@ -60,12 +75,13 @@ class SQLManager:
         return data > 0
     
 
-    def add_month_entry(self, month, default_fisse=None):
+    def add_month_entry(self, month, default_fisse=None, default_notes=None):
         columns_info = self.cursor.execute("PRAGMA table_info(spese_mensili)").fetchall()
         columns = [col[1] for col in columns_info]
         columns_str = ', '.join(columns)
         placeholders = ', '.join(['?'] * len(columns))
         default_fisse = default_fisse or {}
+        default_notes = default_notes or {}
         values = [month]
         for col in columns[1:]:
             if col in default_fisse:
@@ -83,7 +99,8 @@ class SQLManager:
             mese_data = f"{month_num:02d}-{year}"
             for col, val in default_fisse.items():
                 if val and float(val) != 0.0:
-                    self.insert_expense_in_registry(col, 'Default', float(val), mese_data)
+                    note = default_notes.get(col, 'Default')
+                    self.insert_expense_in_registry(col, note, float(val), mese_data, is_default=1)
         self.commit()
 
 
@@ -169,7 +186,7 @@ class SQLManager:
         month_num = self._get_month_number(month_name)
         mese_data = f"{month_num:02d}-{year}"
         return self.cursor.execute(
-            "SELECT id, timestamp, categoria, nota, importo, data "
+            "SELECT id, timestamp, categoria, nota, importo, data, is_default "
             "FROM registro_spese WHERE data = ? ORDER BY id DESC",
             (mese_data,)
         ).fetchall()
@@ -375,7 +392,8 @@ CREATE TABLE registro_spese (
     categoria TEXT,
     nota TEXT,
     importo REAL,
-    data TEXT
+    data TEXT,
+    is_default INTEGER DEFAULT 0
 );
 
 CREATE TABLE spese_mensili (
