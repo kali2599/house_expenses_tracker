@@ -84,9 +84,9 @@ user_db_file() {
 
 mode_suffix() {
     case "$MODE" in
-        data)   echo ".data" ;;
-        schema) echo ".schema" ;;
-        *)      echo "" ;;
+        data)   echo "data" ;;
+        schema) echo "schema" ;;
+        *)      echo "db" ;;
     esac
 }
 
@@ -125,7 +125,7 @@ backup_user() {
     local db_file db_out rows_part rows_reg
 
     db_file="$(user_db_file "$user")"
-    db_out="$OUTPUT_DIR/${user}_${TIMESTAMP}$(mode_suffix).sql"
+    db_out="$OUTPUT_DIR/${user}_$(mode_suffix).sql"
 
     if [[ ! -f "$db_file" ]]; then
         echo "[!] Utente '$user': database non trovato ($db_file) — salto."
@@ -167,7 +167,7 @@ done
 # ─── Central users.db (only when backing up all users) ───
 if [[ -z "$TARGET_USER" || "$TARGET_USER" == "all" ]]; then
     if [[ -f "$USERS_DB" ]]; then
-        users_out="$OUTPUT_DIR/users_${TIMESTAMP}$(mode_suffix).sql"
+        users_out="$OUTPUT_DIR/users_$(mode_suffix).sql"
         if ! dump_by_mode "$USERS_DB" > "$users_out"; then
             echo "[!] Errore durante il backup di users.db"
             some_failure=1
